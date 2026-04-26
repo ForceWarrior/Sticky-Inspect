@@ -45,7 +45,7 @@ Sticky Inspect requests:
 ## Userscript Version
 
 A Violentmonkey or Tampermonkey compatible version is available at
-`../Versions/StickyInspect-Violentmonkey.user.js`.
+`StickyInspect-Violentmonkey.user.js`.
 
 The userscript build cannot use the browser toolbar action, so it adds a small
 floating `SI` launcher and menu commands instead.
