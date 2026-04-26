@@ -53,3 +53,8 @@ floating `SI` launcher and menu commands instead.
 ## License
 
 See `LICENSE.txt`.
+
+## Extension
+
+Get the extension here:
+https://chromewebstore.google.com/detail/sticky-inspect/ccddikklnkkdcejidbkmbaopfjggcaph
