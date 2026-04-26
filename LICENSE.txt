@@ -1,0 +1,28 @@
+# Sticky Inspect License
+
+Copyright (c) 2026 ForceWarrior
+
+Permission is granted to any person to use, copy, modify, and share this
+software and its source code for personal, educational, or non-commercial
+purposes, subject to the following conditions:
+
+1. No store distribution. You may not publish, upload, sell, or distribute this
+   software, or any modified version of it, on the Chrome Web Store, Firefox
+   Add-ons, Microsoft Edge Add-ons, or any other browser extension marketplace
+   without explicit written permission from the copyright holder.
+
+2. No impersonation. You may not present modified versions as the official
+   Sticky Inspect extension or use the Sticky Inspect name, icon, branding, or
+   related materials to mislead users.
+
+3. Attribution. Any copy, modification, or redistribution of this software must
+   retain this license notice and clearly credit the original author.
+
+4. No warranty. This software is provided "as is", without warranty of any
+   kind, express or implied, including but not limited to the warranties of
+   merchantability, fitness for a particular purpose, and noninfringement. The
+   copyright holder is not liable for any claim, damages, or other liability
+   arising from use of the software.
+
+For commercial use, marketplace distribution, or other permissions not granted
+by this license, contact the copyright holder.
