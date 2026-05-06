@@ -58,3 +58,7 @@ See `LICENSE.txt`.
 
 Get the extension here:
 https://chromewebstore.google.com/detail/sticky-inspect/ccddikklnkkdcejidbkmbaopfjggcaph
+
+## Notes
+
+- AI assistance was used
