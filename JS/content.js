@@ -3,22 +3,73 @@
   const THEME_STORAGE_KEY = "stickyInspectTheme";
   const SUPPORTED_PROTOCOLS = new Set(["http:", "https:", "file:"]);
   const PANEL_HOST_ID = "sticky-inspect-host";
+  const PANEL_HOST_TAG = "sticky-inspect-root";
   const HIGHLIGHT_ID = "sticky-inspect-highlight";
   const INITIAL_CLOAK_ID = "sticky-inspect-initial-cloak";
   const RULE_CLOAK_ID = "sticky-inspect-rule-cloak";
   const RULE_READY_ATTRIBUTE = "data-sticky-inspect-ready";
-  const PANEL_OPEN_SESSION_KEY = "stickyInspect:panelOpen";
-  const PANEL_VIEW_SESSION_KEY = "stickyInspect:panelView";
-  const PANEL_POSITION_SESSION_KEY = "stickyInspect:panelPosition";
-  const PANEL_STATE_STORAGE_PREFIX = "stickyInspectPanelState:";
-  const REAPPLY_DEBOUNCE_MS = 150;
-  const INITIAL_APPLY_INTERVAL_MS = 16;
-  const INITIAL_APPLY_WINDOW_MS = 5000;
-  const INITIAL_CLOAK_MAX_MS = 5000;
+  const INSERTED_ATTRIBUTE = "data-sticky-inserted";
+  const INSTANCE_EVENT = "sticky-inspect:instance-started";
+  const PANEL_SESSION_KEY = "stickyInspect:panelState";
+  const LEGACY_PANEL_SESSION_KEYS = ["stickyInspect:panelOpen", "stickyInspect:panelView", "stickyInspect:panelPosition"];
+  const INITIAL_CLOAK_MAX_MS = 1500;
+  const MAX_CHAINED_DIRTY_APPLIES = 20;
+  const DIRTY_APPLY_WINDOW_MS = 1000;
+  const MAX_DIRTY_APPLIES_PER_WINDOW = 120;
+  const BUSY_APPLY_DELAY_MS = 250;
+  const PANEL_MARGIN = 8;
+  const CLEAR_CONFIRM_MS = 3000;
+  const PICKER_BLOCKED_EVENTS = ["pointerdown", "pointerup", "mousedown", "mouseup", "dblclick", "auxclick"];
+  const PANEL_KEY_EVENTS = ["keydown", "keyup", "keypress"];
 
-  const pageKey = GetPageKey(window.location.href);
-  const storageKey = pageKey ? `${STORAGE_PREFIX}${pageKey}` : null;
-  const panelStateStorageKey = pageKey ? `${PANEL_STATE_STORAGE_PREFIX}${pageKey}` : null;
+  const HOST_STYLE = [
+    "all: initial",
+    "display: block",
+    "position: fixed",
+    "inset: 0 auto auto 0",
+    "width: 0",
+    "height: 0",
+    "margin: 0",
+    "padding: 0",
+    "border: 0",
+    "overflow: visible",
+    "background: transparent",
+    "visibility: visible",
+    "opacity: 1",
+    "transform: none",
+    "filter: none",
+    "pointer-events: none",
+    "z-index: 2147483647",
+  ].map((declaration) => `${declaration} !important`).join("; ");
+
+  const LEGACY_MULTIPART_SUFFIXES = new Set([
+    "co.uk", "org.uk", "gov.uk", "ac.uk", "co.jp", "com.au", "net.au", "org.au", "co.nz", "com.br",
+  ]);
+  const MULTIPART_SUFFIXES = new Set([
+    ...LEGACY_MULTIPART_SUFFIXES,
+    "me.uk", "ltd.uk", "plc.uk", "net.uk", "sch.uk", "nhs.uk", "police.uk",
+    "ne.jp", "or.jp", "ac.jp", "go.jp", "ed.jp", "gr.jp",
+    "edu.au", "gov.au", "asn.au", "id.au",
+    "net.nz", "org.nz", "govt.nz", "ac.nz", "school.nz",
+    "net.br", "org.br", "gov.br", "edu.br",
+    "co.in", "net.in", "org.in", "gov.in", "ac.in", "edu.in", "firm.in", "gen.in", "ind.in",
+    "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn",
+    "com.hk", "org.hk", "edu.hk", "gov.hk", "com.tw", "org.tw", "edu.tw", "gov.tw",
+    "com.sg", "edu.sg", "gov.sg", "com.my", "gov.my", "edu.my",
+    "com.mx", "org.mx", "gob.mx", "edu.mx", "com.ar", "gob.ar", "com.co", "gov.co",
+    "com.pe", "gob.pe", "com.ve", "com.ec", "com.uy", "com.py", "com.bo",
+    "com.tr", "gov.tr", "edu.tr", "org.tr", "co.za", "org.za", "gov.za", "ac.za",
+    "co.kr", "or.kr", "go.kr", "ac.kr", "co.il", "org.il", "gov.il", "ac.il",
+    "co.id", "or.id", "go.id", "ac.id", "co.th", "or.th", "go.th", "ac.th", "in.th",
+    "com.ph", "gov.ph", "edu.ph", "com.vn", "gov.vn", "edu.vn", "com.pk", "gov.pk", "edu.pk",
+    "com.bd", "gov.bd", "com.eg", "gov.eg", "com.sa", "gov.sa", "com.ng", "gov.ng",
+    "co.ke", "or.ke", "go.ke", "com.ua", "gov.ua", "com.pl", "gov.pl", "com.ru", "gov.ru",
+    "github.io", "gitlab.io", "vercel.app", "netlify.app", "pages.dev", "workers.dev",
+    "web.app", "firebaseapp.com", "herokuapp.com", "appspot.com", "blogspot.com",
+    "wordpress.com", "azurewebsites.net", "cloudfront.net", "onrender.com", "glitch.me",
+    "neocities.org", "myshopify.com", "wixsite.com", "weebly.com", "tumblr.com",
+    "surge.sh", "fly.dev", "deno.dev", "ngrok.io", "ngrok-free.app", "replit.app", "repl.co",
+  ]);
 
   const THEMES = [
     { id: "evergreen", name: "Evergreen", accent: "#10b981", bg: "#0f1f1a", surface: "#122b22", field: "#0a1612", border: "#1f3b30", text: "#ecfdf5", muted: "#6ee7b7", soft: "#a7f3d0", hint: "#5eead4", tagBg: "#042f1f", primaryText: "#052e1a", danger: "#fca5a5", dangerBorder: "#4c1d1d", shadow: "rgba(0, 0, 0, 0.45)" },
@@ -35,50 +86,54 @@
     { id: "neon", name: "Neon", accent: "#22ff88", bg: "#0a0014", surface: "#140026", field: "#06000d", border: "#3d1166", text: "#f5d0fe", muted: "#ff7ad9", soft: "#fbcfe8", hint: "#22d3ee", tagBg: "#240046", primaryText: "#031f10", danger: "#ff6b6b", dangerBorder: "#7f1d1d", shadow: "rgba(34, 211, 238, 0.35)" },
   ];
 
+  const pageKey = GetPageKey(window.location.href, MULTIPART_SUFFIXES);
+  const legacyPageKey = GetPageKey(window.location.href, LEGACY_MULTIPART_SUFFIXES);
+  const storageKey = pageKey ? `${STORAGE_PREFIX}${pageKey}` : null;
+  const legacyStorageKey = legacyPageKey && legacyPageKey !== pageKey ? `${STORAGE_PREFIX}${legacyPageKey}` : null;
+  const logoUrl = GetExtensionUrl("Assets/Icon.png");
+
   let activeRules = [];
+  let activeReadyTokens = new Set();
   let observer = null;
   let applyScheduled = false;
-  let isApplyingRules = false;
+  let chainedDirtyApplies = 0;
+  let chainResetPending = false;
+  let dirtyWindowStartedAt = 0;
+  let dirtyAppliesInWindow = 0;
+  let disposed = false;
+  const elementRuleState = new WeakMap();
 
   let pickerActive = false;
-  let selectedElement = null;
   let highlightedElement = null;
+  let highlightFrame = 0;
   let panelHost = null;
   let highlightBox = null;
   let panelElement = null;
-  let initialPhaseActive = false;
+  let panelResizeObserver = null;
   let initialCloakElement = null;
+  let initialCloakTimer = 0;
   let ruleCloakElement = null;
   let panelDragState = null;
   let activeThemeId = THEMES[0].id;
-  let panelSessionState = { open: false, view: "menu", left: null, top: null };
-  let skipNextPositionRestore = false;
+  let panelState = { open: false, view: "menu", left: null, top: null };
 
-  if (IsSupportedPage()) {
+  document.dispatchEvent(new CustomEvent(INSTANCE_EVENT));
+  document.addEventListener(INSTANCE_EVENT, Dispose);
+  RemoveStaleNodes();
+
+  if (IsSupportedPage() && document.readyState === "loading") {
     InstallInitialCloak();
   }
 
-  const initialLoadPromise = Initialize();
+  const initialLoadPromise = Initialize().catch(() => false);
 
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    HandleMessage(message)
-      .then((response) => sendResponse(response))
-      .catch((error) => {
-        sendResponse({
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-
-    return true;
-  });
-
-  window.addEventListener("beforeunload", SavePanelPosition, true);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") {
-      SavePanelPosition();
-    }
-  });
+  chrome.runtime.onMessage.addListener(HandleRuntimeMessage);
+  chrome.storage.onChanged.addListener(HandleStorageChange);
+  window.addEventListener("pagehide", WritePanelSession, true);
+  window.addEventListener("pageshow", HandlePageShow, true);
+  for (const type of PANEL_KEY_EVENTS) {
+    window.addEventListener(type, IsolatePanelKeyEvent, true);
+  }
 
   async function Initialize() {
     if (!IsSupportedPage()) {
@@ -86,49 +141,57 @@
       return false;
     }
 
-    await WaitForDocumentElement();
-    StartObserver();
-
-    activeThemeId = await ReadThemeId();
-    activeRules = await ReadRules();
-
     try {
-      const sessionOpen = window.sessionStorage.getItem(PANEL_OPEN_SESSION_KEY) === "1";
-      if (sessionOpen) {
-        const storedPanelState = await ReadStoredPanelState();
-        if (storedPanelState) {
-          panelSessionState = { ...panelSessionState, ...storedPanelState, open: true };
-        }
-        EnsureOverlay();
-        RestorePanelView(panelSessionState.view);
+      await WaitForDocumentElement();
+      const stored = await ReadStoredState();
+      if (disposed) {
+        return false;
       }
-    } catch (e) {}
-
-    if (!activeRules.length) {
+      activeThemeId = stored.themeId;
+      SetActiveRules(stored.rules);
+    } finally {
       RemoveInitialCloak();
-      return true;
     }
 
-    StartInitialApplyBurst();
+    RestorePanelFromSession();
+
+    document.addEventListener("DOMContentLoaded", ScheduleRuleApply, { once: true });
+    window.addEventListener("load", ScheduleRuleApply, { once: true });
+    return true;
+  }
+
+  function HandleRuntimeMessage(message, sender, sendResponse) {
+    if (disposed) {
+      return false;
+    }
+
+    HandleMessage(message)
+      .then((response) => sendResponse(response))
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: DescribeError(error),
+        });
+      });
+
     return true;
   }
 
   async function HandleMessage(message) {
+    await initialLoadPromise;
+
     switch (message?.type) {
       case "stickyInspect:getStatus":
-        await initialLoadPromise;
         return GetStatus();
+      case "stickyInspect:togglePanel":
+        return TogglePanel();
       case "stickyInspect:openMenu":
-        await initialLoadPromise;
-        return OpenMenu(message.forceDefaultPosition === true);
+        return OpenMenu();
       case "stickyInspect:startPicker":
-        await initialLoadPromise;
         return StartPicker();
       case "stickyInspect:apply":
-        await initialLoadPromise;
         return ApplyRulesNow();
       case "stickyInspect:clear":
-        await initialLoadPromise;
         return ClearRules();
       default:
         return {
@@ -138,40 +201,33 @@
     }
   }
 
-  async function GetStatus() {
-    activeRules = await ReadRules();
+  function UnsupportedResult() {
+    return {
+      ok: false,
+      error: "This page cannot be modified by the extension.",
+    };
+  }
 
+  async function GetStatus() {
     return {
       ok: true,
       supported: IsSupportedPage(),
       pageKey,
       ruleCount: activeRules.length,
       pickerActive,
+      panelOpen: IsPanelVisible(),
     };
   }
 
   async function StartPicker() {
     if (!IsSupportedPage()) {
-      return {
-        ok: false,
-        error: "This page cannot be modified by the extension.",
-      };
-    }
-
-    if (pickerActive) {
-      return {
-        ok: true,
-        message: "Picker is already active on this tab.",
-      };
+      return UnsupportedResult();
     }
 
     EnsureOverlay();
-    pickerActive = true;
-    selectedElement = null;
-    highlightedElement = null;
-
+    panelState.open = true;
+    UpdateObserver();
     RenderPickerPanel();
-    AddPickerListeners();
 
     return {
       ok: true,
@@ -179,77 +235,52 @@
     };
   }
 
-  async function OpenMenu(forceDefaultPosition) {
+  async function TogglePanel() {
+    if (IsPanelVisible()) {
+      ClosePanel();
+      return { ok: true, open: false };
+    }
+
+    const result = await OpenMenu();
+    return { ...result, open: result.ok };
+  }
+
+  async function OpenMenu() {
     if (!IsSupportedPage()) {
-      return {
-        ok: false,
-        error: "This page cannot be modified by the extension.",
-      };
+      return UnsupportedResult();
     }
 
-    if (panelHost?.isConnected && panelElement && !forceDefaultPosition) {
-      return { ok: true, alreadyOpen: true };
-    }
-
-    activeThemeId = await ReadThemeId();
+    await RefreshRulesFromStorage();
     EnsureOverlay();
-    skipNextPositionRestore = true;
-    if (panelElement) {
-      panelElement.style.left = "";
-      panelElement.style.top = "";
-      panelElement.style.right = "24px";
-    }
-    if (highlightBox) {
-      highlightBox.style.display = "none";
-    }
-    activeRules = await ReadRules();
-    panelSessionState = { open: true, view: "menu", left: null, top: null };
-    if (panelStateStorageKey) {
-      await chrome.storage.local.remove(panelStateStorageKey).catch(() => {});
-    }
-    try {
-      window.sessionStorage.setItem(PANEL_OPEN_SESSION_KEY, "1");
-      window.sessionStorage.removeItem(PANEL_POSITION_SESSION_KEY);
-    } catch (e) {}
+    panelState = { open: true, view: "menu", left: null, top: null };
+    UpdateObserver();
     RenderMenuPanel();
-    if (panelElement) {
-      panelElement.style.left = "";
-      panelElement.style.top = "";
-      panelElement.style.right = "24px";
-    }
 
     return { ok: true };
   }
 
   async function ApplyRulesNow() {
     if (!IsSupportedPage()) {
-      return {
-        ok: false,
-        error: "This page cannot be modified by the extension.",
-      };
+      return UnsupportedResult();
     }
 
-    activeRules = await ReadRules();
-    const appliedCount = ApplyAllRules();
+    await RefreshRulesFromStorage();
+    const stats = ApplyAllRules();
 
     return {
       ok: true,
       ruleCount: activeRules.length,
-      appliedCount,
+      appliedCount: stats.matched,
     };
   }
 
   async function ClearRules() {
     if (!storageKey) {
-      return {
-        ok: false,
-        error: "This page cannot be modified by the extension.",
-      };
+      return UnsupportedResult();
     }
 
-    await chrome.storage.local.remove(storageKey);
-    activeRules = [];
-    RefreshRuleCloak();
+    await chrome.storage.local.set({ [storageKey]: [] });
+    SetActiveRules([]);
 
     return {
       ok: true,
@@ -257,19 +288,81 @@
     };
   }
 
+  function Dispose() {
+    if (disposed) {
+      return;
+    }
+
+    disposed = true;
+    StopObserver();
+    RemoveOverlay();
+    RemoveInitialCloak();
+    if (ruleCloakElement?.isConnected) {
+      ruleCloakElement.remove();
+    }
+    ruleCloakElement = null;
+
+    document.removeEventListener(INSTANCE_EVENT, Dispose);
+    window.removeEventListener("pagehide", WritePanelSession, true);
+    window.removeEventListener("pageshow", HandlePageShow, true);
+    for (const type of PANEL_KEY_EVENTS) {
+      window.removeEventListener(type, IsolatePanelKeyEvent, true);
+    }
+    try {
+      chrome.runtime.onMessage.removeListener(HandleRuntimeMessage);
+      chrome.storage.onChanged.removeListener(HandleStorageChange);
+    } catch (error) {}
+  }
+
+  function RemoveStaleNodes() {
+    document.getElementById(PANEL_HOST_ID)?.remove();
+    document.getElementById(RULE_CLOAK_ID)?.remove();
+    const staleCloak = document.getElementById(INITIAL_CLOAK_ID);
+    if (staleCloak) {
+      staleCloak.remove();
+      document.documentElement?.style.removeProperty("visibility");
+    }
+  }
+
+  function HandlePageShow(event) {
+    if (event.persisted) {
+      RefreshRulesFromStorage().catch(() => {});
+    }
+  }
+
+  function HandleStorageChange(changes, areaName) {
+    if (disposed || areaName !== "local") {
+      return;
+    }
+
+    if (storageKey && changes[storageKey]) {
+      const nextRules = NormalizeRules(changes[storageKey].newValue);
+      if (!SameRules(nextRules, activeRules)) {
+        SetActiveRules(nextRules);
+        if (panelElement && (panelState.view === "menu" || panelState.view === "rules")) {
+          RestorePanelView(panelState.view);
+        }
+      }
+    }
+
+    if (changes[THEME_STORAGE_KEY]) {
+      const themeId = NormalizeThemeId(changes[THEME_STORAGE_KEY].newValue);
+      if (themeId !== activeThemeId) {
+        activeThemeId = themeId;
+        ApplyPanelTheme();
+        if (panelElement && panelState.view === "themes") {
+          RenderThemePanel();
+        }
+      }
+    }
+  }
+
   function StartObserver() {
     if (observer || !document.documentElement) {
       return;
     }
 
-    observer = new MutationObserver(() => {
-      if (isApplyingRules) {
-        return;
-      }
-
-      ScheduleRuleApply();
-    });
-
+    observer = new MutationObserver(ScheduleRuleApply);
     observer.observe(document.documentElement, {
       attributes: true,
       characterData: true,
@@ -278,105 +371,112 @@
     });
   }
 
-  function StartInitialApplyBurst() {
-    initialPhaseActive = true;
-    const burstStartedAt = Date.now();
-    let stableHits = 0;
+  function StopObserver() {
+    observer?.disconnect();
+    observer = null;
+  }
 
-    const AllSatisfied = () => activeRules.every(IsRuleSatisfied);
-
-    const ApplyPass = () => {
-      ApplyAllRules();
-      if (AllSatisfied()) {
-        stableHits += 1;
-      } else {
-        stableHits = 0;
-      }
-    };
-
-    const StopBurst = () => {
-      window.clearInterval(intervalId);
-      initialPhaseActive = false;
-      RemoveInitialCloak();
-    };
-
-    const intervalId = window.setInterval(() => {
-      ApplyPass();
-
-      const elapsed = Date.now() - burstStartedAt;
-      const domReady = document.readyState !== "loading";
-      if ((stableHits >= 3 && domReady) || elapsed >= INITIAL_APPLY_WINDOW_MS) {
-        StopBurst();
-      }
-    }, INITIAL_APPLY_INTERVAL_MS);
-
-    ApplyPass();
-
-    document.addEventListener(
-      "DOMContentLoaded",
-      () => {
-        ApplyPass();
-      },
-      { once: true }
-    );
-
-    window.addEventListener(
-      "load",
-      () => {
-        ApplyPass();
-      },
-      { once: true }
-    );
-
-    window.setTimeout(() => {
-      StopBurst();
-    }, INITIAL_CLOAK_MAX_MS);
+  function UpdateObserver() {
+    if (!disposed && (activeRules.length || panelState.open)) {
+      StartObserver();
+    } else {
+      StopObserver();
+    }
   }
 
   function ScheduleRuleApply() {
-    if (applyScheduled) {
+    if (applyScheduled || disposed) {
       return;
     }
 
     applyScheduled = true;
-    queueMicrotask(() => {
-      applyScheduled = false;
-      ApplyAllRules();
-    });
+
+    if (IsApplyBudgetSpent()) {
+      window.setTimeout(RunScheduledApply, BUSY_APPLY_DELAY_MS);
+    } else if (chainedDirtyApplies >= MAX_CHAINED_DIRTY_APPLIES) {
+      window.setTimeout(RunScheduledApply, 0);
+    } else {
+      queueMicrotask(RunScheduledApply);
+    }
+  }
+
+  function RunScheduledApply() {
+    applyScheduled = false;
+    if (disposed) {
+      return;
+    }
+
+    const writes = ReattachOverlay() + ApplyAllRules().writes;
+    if (writes > 0) {
+      RecordDirtyApply();
+    }
+  }
+
+  function RecordDirtyApply() {
+    const now = performance.now();
+    if (now - dirtyWindowStartedAt > DIRTY_APPLY_WINDOW_MS) {
+      dirtyWindowStartedAt = now;
+      dirtyAppliesInWindow = 0;
+    }
+    dirtyAppliesInWindow += 1;
+    chainedDirtyApplies += 1;
+
+    if (!chainResetPending) {
+      chainResetPending = true;
+      window.setTimeout(() => {
+        chainResetPending = false;
+        chainedDirtyApplies = 0;
+      }, 0);
+    }
+  }
+
+  function IsApplyBudgetSpent() {
+    return dirtyAppliesInWindow >= MAX_DIRTY_APPLIES_PER_WINDOW &&
+      performance.now() - dirtyWindowStartedAt <= DIRTY_APPLY_WINDOW_MS;
+  }
+
+  function SetActiveRules(rules) {
+    const previousRules = activeRules;
+    activeRules = rules;
+    RemoveStaleRuleArtifacts(previousRules, rules);
+    RefreshRuleCloak();
+    UpdateObserver();
+    ApplyAllRules();
   }
 
   function ApplyAllRules() {
-    if (!activeRules.length) {
-      RefreshRuleCloak();
-      return 0;
+    const stats = { matched: 0, writes: 0 };
+    if (disposed || !activeRules.length) {
+      return stats;
     }
-
-    let appliedCount = 0;
-    isApplyingRules = true;
 
     try {
-      RefreshRuleCloak();
+      stats.writes += EnsureRuleCloakAttached();
       for (const rule of activeRules) {
-        appliedCount += ApplyRule(rule);
+        try {
+          ApplyRule(rule, stats);
+        } catch (error) {}
       }
     } finally {
-      isApplyingRules = false;
+      observer?.takeRecords();
     }
 
-    return appliedCount;
+    return stats;
   }
 
-  function ApplyRule(rule) {
+  function ApplyRule(rule, stats) {
     if (!rule?.action) {
-      return 0;
+      return;
     }
 
     if (rule.action === "injectCSS") {
-      return ApplyInjectCSS(rule) ? 1 : 0;
+      stats.matched += 1;
+      stats.writes += ApplyInjectCSS(rule);
+      return;
     }
 
     if (!rule.selector) {
-      return 0;
+      return;
     }
 
     let elements;
@@ -384,156 +484,249 @@
     try {
       elements = document.querySelectorAll(rule.selector);
     } catch (error) {
-      return 0;
+      return;
     }
 
-    let appliedCount = 0;
+    const ruleKey = GetRuleKey(rule);
 
     for (const element of elements) {
-      if (ApplyRuleToElement(rule, element)) {
-        MarkRuleApplied(rule, element);
-        appliedCount += 1;
+      if (IsOwnElement(element)) {
+        continue;
       }
-    }
 
-    return appliedCount;
+      stats.matched += 1;
+      try {
+        stats.writes += ApplyRuleToElement(rule, ruleKey, element);
+      } catch (error) {}
+      stats.writes += MarkRuleApplied(rule, element);
+    }
   }
 
   function ApplyInjectCSS(rule) {
-    const id = `sticky-injected-css-${rule.savedAt || 0}`;
+    const id = GetInjectedCssId(rule);
+    const css = String(rule.value ?? "");
     let styleEl = document.getElementById(id);
-    const css = rule.value || "";
     if (styleEl) {
-      if (styleEl.textContent !== css) styleEl.textContent = css;
-      return true;
+      if (styleEl.textContent === css) {
+        return 0;
+      }
+      styleEl.textContent = css;
+      return 1;
     }
     styleEl = document.createElement("style");
     styleEl.id = id;
     styleEl.setAttribute("data-sticky-css", "");
     styleEl.textContent = css;
     (document.head || document.documentElement).appendChild(styleEl);
-    return true;
+    return 1;
   }
 
-  function ApplyRuleToElement(rule, element) {
+  function ApplyRuleToElement(rule, ruleKey, element) {
+    const value = String(rule.value ?? "");
+
     switch (rule.action) {
-      case "setText":
-        if (element.textContent !== rule.value) {
-          element.textContent = rule.value;
+      case "setText": {
+        if (element === document.documentElement || element.textContent === value) {
+          return 0;
         }
-        return true;
-      case "setHTML":
-        if (element.innerHTML !== rule.value) {
-          element.innerHTML = rule.value;
-        }
-        return true;
-      case "setValue":
-        if ("value" in element && element.value !== rule.value) {
-          element.value = rule.value;
-          element.setAttribute("value", rule.value);
-          return true;
-        }
-        return false;
-      case "setAttribute":
-        if (!rule.attributeName) {
-          return false;
-        }
-        if (element.getAttribute(rule.attributeName) !== rule.value) {
-          element.setAttribute(rule.attributeName, rule.value);
-        }
-        return true;
-      case "insertHTML": {
-        const marker = `data-sticky-injected-${rule.savedAt || 0}`;
-        const pos = rule.position || "append";
-        if (pos === "before" && element.previousElementSibling?.hasAttribute?.(marker)) return true;
-        if (pos === "after" && element.nextElementSibling?.hasAttribute?.(marker)) return true;
-        if (pos === "prepend" && element.firstElementChild?.hasAttribute?.(marker)) return true;
-        if (pos === "append" && element.lastElementChild?.hasAttribute?.(marker)) return true;
-
-        const wrapper = document.createElement("div");
-        wrapper.innerHTML = rule.value || "";
-        const nodes = Array.from(wrapper.childNodes);
-        const firstEl = nodes.find((n) => n.nodeType === 1);
-        if (firstEl) firstEl.setAttribute(marker, "");
-
-        if (pos === "before") nodes.forEach((n) => element.parentNode?.insertBefore(n, element));
-        else if (pos === "after") nodes.reverse().forEach((n) => element.parentNode?.insertBefore(n, element.nextSibling));
-        else if (pos === "prepend") nodes.reverse().forEach((n) => element.insertBefore(n, element.firstChild));
-        else nodes.forEach((n) => element.appendChild(n));
-        return true;
+        element.textContent = value;
+        return 1;
       }
+      case "setHTML": {
+        if (element === document.documentElement) {
+          return 0;
+        }
+        const current = element.innerHTML;
+        const state = GetElementRuleState(element, ruleKey);
+        if (current === value || (state?.source === value && state.result === current)) {
+          return 0;
+        }
+        element.innerHTML = value;
+        SetElementRuleState(element, ruleKey, { source: value, result: element.innerHTML });
+        return 1;
+      }
+      case "setValue": {
+        if (!("value" in element) || element === document.activeElement) {
+          return 0;
+        }
+        let writes = 0;
+        const state = GetElementRuleState(element, ruleKey);
+        const settled = element.value === value || (state?.source === value && state.result === element.value);
+        if (!settled) {
+          element.value = value;
+          SetElementRuleState(element, ruleKey, { source: value, result: element.value });
+          writes += 1;
+        }
+        if (element.getAttribute("value") !== value) {
+          element.setAttribute("value", value);
+          writes += 1;
+        }
+        return writes;
+      }
+      case "setAttribute": {
+        const attributeName = String(rule.attributeName || "").trim();
+        if (!attributeName || element.getAttribute(attributeName) === value) {
+          return 0;
+        }
+        element.setAttribute(attributeName, value);
+        return 1;
+      }
+      case "insertHTML":
+        return InsertHtml(rule, element);
       case "remove":
-        if (element.isConnected) {
-          element.remove();
+        if (element === document.documentElement || element === document.head || element === document.body) {
+          return 0;
         }
-        return true;
+        element.remove();
+        return 1;
       default:
-        return false;
+        return 0;
     }
   }
 
-  function IsRuleSatisfied(rule) {
-    if (!rule?.action) return true;
-
-    if (rule.action === "injectCSS") {
-      const styleEl = document.getElementById(`sticky-injected-css-${rule.savedAt || 0}`);
-      return Boolean(styleEl && styleEl.textContent === (rule.value || ""));
+  function InsertHtml(rule, element) {
+    if (element.closest(`[${INSERTED_ATTRIBUTE}]`)) {
+      return 0;
     }
 
-    if (!rule.selector) return true;
-    let elements;
-    try {
-      elements = document.querySelectorAll(rule.selector);
-    } catch (error) {
-      return true;
+    const marker = GetInsertMarker(rule);
+    const position = rule.position || "append";
+    if (HasInsertedContent(element, marker, position)) {
+      return 0;
     }
 
-    if (rule.action === "remove") {
-      return elements.length === 0;
+    const parent = element.parentElement;
+    if ((position === "before" || position === "after") && !parent) {
+      return 0;
     }
 
-    if (rule.action === "insertHTML") {
-      const marker = `data-sticky-injected-${rule.savedAt || 0}`;
-      const pos = rule.position || "append";
-      return elements.length > 0 && Array.from(elements).every((element) => {
-        if (pos === "before") return element.previousElementSibling?.hasAttribute?.(marker);
-        if (pos === "after") return element.nextElementSibling?.hasAttribute?.(marker);
-        if (pos === "prepend") return element.firstElementChild?.hasAttribute?.(marker);
-        return element.lastElementChild?.hasAttribute?.(marker);
-      });
+    const fragment = BuildInsertFragment(rule.value, marker);
+    if (!fragment.childNodes.length) {
+      return 0;
     }
 
-    if (!elements.length) return false;
+    if (position === "before") parent.insertBefore(fragment, element);
+    else if (position === "after") parent.insertBefore(fragment, element.nextSibling);
+    else if (position === "prepend") element.insertBefore(fragment, element.firstChild);
+    else element.appendChild(fragment);
+    return 1;
+  }
 
-    return Array.from(elements).every((element) => {
-      switch (rule.action) {
-        case "setText": return element.textContent === rule.value;
-        case "setHTML": return element.innerHTML === rule.value;
-        case "setValue": return "value" in element ? element.value === rule.value : true;
-        case "setAttribute":
-          return rule.attributeName ? element.getAttribute(rule.attributeName) === rule.value : true;
-        default: return true;
+  function HasInsertedContent(element, marker, position) {
+    if (position === "before") {
+      return Boolean(element.previousElementSibling?.hasAttribute(marker));
+    }
+    if (position === "after") {
+      return Boolean(element.nextElementSibling?.hasAttribute(marker));
+    }
+    for (const child of element.children) {
+      if (child.hasAttribute(marker)) {
+        return true;
       }
-    });
+    }
+    return false;
   }
 
-  async function SaveRule(rule) {
-    activeRules = UpsertRule(activeRules, rule);
-    RefreshRuleCloak();
+  function BuildInsertFragment(html, marker) {
+    const template = document.createElement("template");
+    template.innerHTML = String(html ?? "");
+    const fragment = template.content;
 
-    await chrome.storage.local.set({
-      [storageKey]: activeRules,
-    });
+    for (const node of Array.from(fragment.childNodes)) {
+      let element = node;
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (!node.data.trim()) {
+          continue;
+        }
+        element = document.createElement("span");
+        node.replaceWith(element);
+        element.append(node);
+      } else if (node.nodeType !== Node.ELEMENT_NODE) {
+        continue;
+      }
+      element.setAttribute(marker, "");
+      element.setAttribute(INSERTED_ATTRIBUTE, "");
+    }
 
-    return activeRules.length;
+    return fragment;
   }
 
-  function UpsertRule(existingRules, nextRule) {
-    const filteredRules = existingRules.filter((rule) => {
-      return GetRuleIdentity(rule) !== GetRuleIdentity(nextRule);
-    });
+  function GetElementRuleState(element, ruleKey) {
+    return elementRuleState.get(element)?.get(ruleKey) || null;
+  }
 
-    filteredRules.push(nextRule);
+  function SetElementRuleState(element, ruleKey, state) {
+    let states = elementRuleState.get(element);
+    if (!states) {
+      states = new Map();
+      elementRuleState.set(element, states);
+    }
+    states.set(ruleKey, state);
+  }
+
+  function RemoveStaleRuleArtifacts(previousRules, nextRules) {
+    const nextKeys = new Set(nextRules.map(GetRuleKey));
+    for (const rule of previousRules) {
+      if (nextKeys.has(GetRuleKey(rule))) {
+        continue;
+      }
+      try {
+        if (rule.action === "injectCSS") {
+          document.getElementById(GetInjectedCssId(rule))?.remove();
+        } else if (rule.action === "insertHTML") {
+          document.querySelectorAll(`[${GetInsertMarker(rule)}]`).forEach((node) => node.remove());
+        }
+      } catch (error) {}
+    }
+  }
+
+  function GetRuleSuffix(rule) {
+    return String(rule.savedAt || 0).replace(/[^\w-]/g, "");
+  }
+
+  function GetInjectedCssId(rule) {
+    return `sticky-injected-css-${GetRuleSuffix(rule)}`;
+  }
+
+  function GetInsertMarker(rule) {
+    return `data-sticky-injected-${GetRuleSuffix(rule)}`;
+  }
+
+  function IsOwnElement(element) {
+    return element === panelHost ||
+      element === ruleCloakElement ||
+      element === initialCloakElement ||
+      element.id === PANEL_HOST_ID ||
+      element.hasAttribute("data-sticky-css");
+  }
+
+  async function SaveRule(rule, replacesKey) {
+    const rules = await MutateRules((current) => UpsertRule(current, rule, replacesKey));
+    return rules.length;
+  }
+
+  async function DeleteRule(ruleKey) {
+    await MutateRules((current) => current.filter((rule) => GetRuleKey(rule) !== ruleKey));
+  }
+
+  async function MutateRules(mutate) {
+    if (!storageKey) {
+      throw new Error("This page cannot be modified by the extension.");
+    }
+
+    const nextRules = mutate(await ReadRules());
+    await chrome.storage.local.set({ [storageKey]: nextRules });
+    SetActiveRules(nextRules);
+    return nextRules;
+  }
+
+  function UpsertRule(existingRules, nextRule, replacesKey) {
+    const identity = GetRuleIdentity(nextRule);
+    const IsReplaced = (rule) => (replacesKey && GetRuleKey(rule) === replacesKey) || GetRuleIdentity(rule) === identity;
+    const index = existingRules.findIndex(IsReplaced);
+    const filteredRules = existingRules.filter((rule) => !IsReplaced(rule));
+
+    filteredRules.splice(index === -1 ? filteredRules.length : index, 0, nextRule);
     return filteredRules;
   }
 
@@ -544,16 +737,59 @@
     return [rule.selector, rule.action, rule.attributeName || ""].join("::");
   }
 
+  function GetRuleKey(rule) {
+    return String(rule.savedAt || GetRuleIdentity(rule));
+  }
+
+  function NextSavedAt() {
+    return activeRules.reduce((latest, rule) => Math.max(latest, (Number(rule.savedAt) || 0) + 1), Date.now());
+  }
+
+  async function ReadStoredState() {
+    const keys = [THEME_STORAGE_KEY, storageKey, legacyStorageKey].filter(Boolean);
+    const result = await chrome.storage.local.get(keys);
+    return {
+      rules: PickRules(result),
+      themeId: NormalizeThemeId(result[THEME_STORAGE_KEY]),
+    };
+  }
+
   async function ReadRules() {
     if (!storageKey) {
       return [];
     }
 
-    const result = await chrome.storage.local.get(storageKey);
-    return Array.isArray(result[storageKey]) ? result[storageKey] : [];
+    const result = await chrome.storage.local.get([storageKey, legacyStorageKey].filter(Boolean));
+    return PickRules(result);
+  }
+
+  async function RefreshRulesFromStorage() {
+    const rules = await ReadRules();
+    if (!SameRules(rules, activeRules)) {
+      SetActiveRules(rules);
+    }
+  }
+
+  function PickRules(result) {
+    if (storageKey && result[storageKey] !== undefined) {
+      return NormalizeRules(result[storageKey]);
+    }
+    return legacyStorageKey ? NormalizeRules(result[legacyStorageKey]) : [];
+  }
+
+  function NormalizeRules(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter((rule) => rule && typeof rule === "object" && typeof rule.action === "string");
+  }
+
+  function SameRules(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
   }
 
   function RefreshRuleCloak() {
+    activeReadyTokens = new Set(activeRules.map(GetRuleReadyToken));
     const css = BuildRuleCloakCss(activeRules);
     if (!css) {
       if (ruleCloakElement?.isConnected) {
@@ -566,11 +802,19 @@
     if (!ruleCloakElement) {
       ruleCloakElement = document.createElement("style");
       ruleCloakElement.id = RULE_CLOAK_ID;
-      AppendToDocumentElement(ruleCloakElement);
     }
     if (ruleCloakElement.textContent !== css) {
       ruleCloakElement.textContent = css;
     }
+    EnsureRuleCloakAttached();
+  }
+
+  function EnsureRuleCloakAttached() {
+    if (!ruleCloakElement || ruleCloakElement.isConnected || !document.documentElement) {
+      return 0;
+    }
+    document.documentElement.appendChild(ruleCloakElement);
+    return 1;
   }
 
   function BuildRuleCloakCss(rules) {
@@ -578,21 +822,27 @@
       .filter((rule) => rule?.selector && rule.action !== "injectCSS")
       .map((rule) => {
         const token = GetRuleReadyToken(rule);
-        return `:where(${rule.selector}):not([${RULE_READY_ATTRIBUTE}~="${token}"]){visibility:hidden!important;}`;
+        return `:where(${rule.selector}):not(html, head, body, #${PANEL_HOST_ID}):not([${RULE_READY_ATTRIBUTE}~="${token}"]){visibility:hidden!important;}`;
       })
       .join("\n");
   }
 
   function MarkRuleApplied(rule, element) {
-    if (!rule?.selector || rule.action === "injectCSS" || rule.action === "remove") {
-      return;
+    if (rule.action === "remove" || !element.isConnected) {
+      return 0;
     }
     const token = GetRuleReadyToken(rule);
-    const existing = (element.getAttribute(RULE_READY_ATTRIBUTE) || "").split(/\s+/).filter(Boolean);
-    if (!existing.includes(token)) {
-      existing.push(token);
-      element.setAttribute(RULE_READY_ATTRIBUTE, existing.join(" "));
+    const current = element.getAttribute(RULE_READY_ATTRIBUTE) || "";
+    const tokens = current.split(/\s+/).filter((existing) => existing && activeReadyTokens.has(existing));
+    if (!tokens.includes(token)) {
+      tokens.push(token);
     }
+    const next = tokens.join(" ");
+    if (next === current) {
+      return 0;
+    }
+    element.setAttribute(RULE_READY_ATTRIBUTE, next);
+    return 1;
   }
 
   function GetRuleReadyToken(rule) {
@@ -608,16 +858,14 @@
     return Math.abs(hash).toString(36);
   }
 
-  async function ReadThemeId() {
-    const result = await chrome.storage.local.get(THEME_STORAGE_KEY);
-    const stored = result[THEME_STORAGE_KEY];
-    return THEMES.some((theme) => theme.id === stored) ? stored : THEMES[0].id;
+  function NormalizeThemeId(themeId) {
+    return THEMES.some((theme) => theme.id === themeId) ? themeId : THEMES[0].id;
   }
 
   async function SaveThemeId(themeId) {
-    activeThemeId = THEMES.some((theme) => theme.id === themeId) ? themeId : THEMES[0].id;
-    await chrome.storage.local.set({ [THEME_STORAGE_KEY]: activeThemeId });
+    activeThemeId = NormalizeThemeId(themeId);
     ApplyPanelTheme();
+    await chrome.storage.local.set({ [THEME_STORAGE_KEY]: activeThemeId });
   }
 
   function GetActiveTheme() {
@@ -627,7 +875,7 @@
   function ApplyPanelTheme() {
     if (!panelElement) return;
     const theme = GetActiveTheme();
-    const targets = [panelElement, panelHost].filter(Boolean);
+    const targets = [panelElement, highlightBox].filter(Boolean);
     for (const [key, value] of Object.entries(theme)) {
       if (key !== "id" && key !== "name") {
         targets.forEach((target) => target.style.setProperty(`--si-${key}`, value));
@@ -636,22 +884,32 @@
     panelElement.dataset.theme = theme.id;
   }
 
+  function IsolatePanelKeyEvent(event) {
+    if (!panelHost || event.target !== panelHost) {
+      return;
+    }
+    if (pickerActive && event.type === "keydown") {
+      HandlePickerKeyDown(event);
+    }
+    event.stopImmediatePropagation();
+  }
+
   function AddPickerListeners() {
-    document.addEventListener("mousemove", HandlePickerMouseMove, true);
-    document.addEventListener("mousedown", HandlePickerMouseDown, true);
-    document.addEventListener("click", HandlePickerClick, true);
-    document.addEventListener("keydown", HandlePickerKeyDown, true);
-    window.addEventListener("scroll", SyncHighlightToSelectedElement, true);
-    window.addEventListener("resize", SyncHighlightToSelectedElement, true);
+    window.addEventListener("mousemove", HandlePickerMouseMove, true);
+    for (const type of PICKER_BLOCKED_EVENTS) {
+      window.addEventListener(type, BlockPickerEvent, true);
+    }
+    window.addEventListener("click", HandlePickerClick, true);
+    window.addEventListener("keydown", HandlePickerKeyDown, true);
   }
 
   function RemovePickerListeners() {
-    document.removeEventListener("mousemove", HandlePickerMouseMove, true);
-    document.removeEventListener("mousedown", HandlePickerMouseDown, true);
-    document.removeEventListener("click", HandlePickerClick, true);
-    document.removeEventListener("keydown", HandlePickerKeyDown, true);
-    window.removeEventListener("scroll", SyncHighlightToSelectedElement, true);
-    window.removeEventListener("resize", SyncHighlightToSelectedElement, true);
+    window.removeEventListener("mousemove", HandlePickerMouseMove, true);
+    for (const type of PICKER_BLOCKED_EVENTS) {
+      window.removeEventListener(type, BlockPickerEvent, true);
+    }
+    window.removeEventListener("click", HandlePickerClick, true);
+    window.removeEventListener("keydown", HandlePickerKeyDown, true);
   }
 
   function HandlePickerMouseMove(event) {
@@ -664,17 +922,11 @@
       return;
     }
 
-    highlightedElement = candidate;
-    DrawHighlight(candidate);
+    SetHighlight(candidate);
   }
 
-  function HandlePickerMouseDown(event) {
-    if (!pickerActive) {
-      return;
-    }
-
-    const candidate = GetPickableElement(event.target);
-    if (!candidate) {
+  function BlockPickerEvent(event) {
+    if (!pickerActive || !GetPickableElement(event.target)) {
       return;
     }
 
@@ -697,36 +949,27 @@
     event.stopPropagation();
     event.stopImmediatePropagation();
 
-    selectedElement = candidate;
-    highlightedElement = candidate;
-    DrawHighlight(candidate);
-    StopPickerKeepPanel();
+    StopPicker();
     RenderEditorPanel(candidate);
   }
 
   function HandlePickerKeyDown(event) {
+    if (!pickerActive || event.key !== "Escape") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    RenderMenuPanel();
+  }
+
+  function StopPicker() {
     if (!pickerActive) {
       return;
     }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      StopPickerKeepPanel();
-      RenderMenuPanel();
-    }
-  }
-
-  function SyncHighlightToSelectedElement() {
-    if (selectedElement?.isConnected) {
-      DrawHighlight(selectedElement);
-      return;
-    }
-
-    if (highlightedElement?.isConnected) {
-      DrawHighlight(highlightedElement);
-    }
+    pickerActive = false;
+    RemovePickerListeners();
   }
 
   function GetPickableElement(target) {
@@ -738,7 +981,7 @@
       return null;
     }
 
-    if (target.id === HIGHLIGHT_ID) {
+    if (IsOwnElement(target)) {
       return null;
     }
 
@@ -749,13 +992,24 @@
     return target;
   }
 
-  function EnsureOverlay() {
-    if (panelHost && highlightBox && panelElement) {
-      return;
-    }
+  function SupportsPopover() {
+    return typeof HTMLElement.prototype.showPopover === "function";
+  }
 
-    panelHost = document.createElement("div");
+  function EnsureOverlay() {
+    if (!panelHost) {
+      CreateOverlay();
+    }
+    AttachOverlay();
+  }
+
+  function CreateOverlay() {
+    panelHost = document.createElement(PANEL_HOST_TAG);
     panelHost.id = PANEL_HOST_ID;
+    panelHost.setAttribute("style", HOST_STYLE);
+    if (SupportsPopover()) {
+      panelHost.setAttribute("popover", "manual");
+    }
 
     const shadowRoot = panelHost.attachShadow({ mode: "open" });
 
@@ -781,8 +1035,11 @@
         top: 24px;
         right: 24px;
         z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
         width: min(340px, calc(100vw - 24px));
         max-width: calc(100vw - 24px);
+        max-height: calc(100vh - ${PANEL_MARGIN * 2}px);
         background: var(--si-bg, #0f1f1a);
         color: var(--si-text, #ecfdf5);
         border: 1px solid var(--si-border, #1f3b30);
@@ -790,9 +1047,11 @@
         box-shadow: 0 18px 40px var(--si-shadow, rgba(0, 0, 0, 0.45));
         font: 13px/1.45 "Segoe UI", Tahoma, sans-serif;
         overflow: hidden;
+        pointer-events: auto;
       }
 
       .panel-header {
+        flex: 0 0 auto;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -802,6 +1061,7 @@
         border-bottom: 1px solid var(--si-border, #1f3b30);
         cursor: move;
         user-select: none;
+        touch-action: none;
       }
 
       .header-title {
@@ -848,6 +1108,7 @@
 
       .panel-body {
         padding: 14px;
+        min-height: 0;
         max-height: 70vh;
         overflow-y: auto;
       }
@@ -999,6 +1260,7 @@
         font-size: 12px;
       }
       .rules-list li:last-child { border-bottom: none; }
+      .rules-list li.no-match .rule-sel { opacity: 0.5; }
       .rules-list .rule-tag {
         font-size: 10px;
         padding: 1px 5px;
@@ -1056,6 +1318,13 @@
         background: var(--si-tagBg, #042f1f);
         color: var(--si-muted, #6ee7b7);
         border: 1px solid var(--si-border, #1f3b30);
+      }
+      .element-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin: 0 0 6px;
       }
 
       .theme-grid {
@@ -1193,166 +1462,198 @@
       if (closeBtn) {
         event.preventDefault();
         event.stopPropagation();
-        StopPicker();
+        ClosePanel();
       }
     });
     ApplyPanelTheme();
 
     shadowRoot.append(style, highlightBox, panelElement);
-    document.documentElement.appendChild(panelHost);
+
+    panelResizeObserver = new ResizeObserver(() => ApplyPanelPosition());
+    panelResizeObserver.observe(panelElement);
+    window.addEventListener("resize", HandleViewportResize, true);
+    window.addEventListener("scroll", ScheduleHighlightRedraw, { capture: true, passive: true });
+  }
+
+  function AttachOverlay() {
+    if (!panelHost || !document.documentElement) {
+      return;
+    }
+
+    if (!panelHost.isConnected) {
+      document.documentElement.appendChild(panelHost);
+    }
+
+    if (SupportsPopover()) {
+      try {
+        if (!panelHost.matches(":popover-open")) {
+          panelHost.showPopover();
+        }
+      } catch (error) {}
+    }
+  }
+
+  function ReattachOverlay() {
+    if (!panelHost || !panelState.open || panelHost.isConnected || !document.documentElement) {
+      return 0;
+    }
+    AttachOverlay();
+    return 1;
+  }
+
+  function RemoveOverlay() {
+    StopPicker();
+    EndPanelDrag();
+    SetHighlight(null);
+    if (highlightFrame) {
+      cancelAnimationFrame(highlightFrame);
+      highlightFrame = 0;
+    }
+    window.removeEventListener("resize", HandleViewportResize, true);
+    window.removeEventListener("scroll", ScheduleHighlightRedraw, { capture: true });
+    panelResizeObserver?.disconnect();
+    panelResizeObserver = null;
+
+    if (panelHost?.isConnected) {
+      panelHost.remove();
+    }
+
+    panelHost = null;
+    highlightBox = null;
+    panelElement = null;
+  }
+
+  function ClosePanel() {
+    RemoveOverlay();
+    panelState = { open: false, view: "menu", left: null, top: null };
+    ClearPanelSession();
+    UpdateObserver();
+  }
+
+  function IsPanelVisible() {
+    return Boolean(panelElement && panelHost?.isConnected && panelState.open);
   }
 
   function PanelHeader(title) {
-    const logoUrl = chrome.runtime.getURL("Assets/Icon.png");
+    const logo = logoUrl
+      ? `<img class="header-logo" src="${EscapeHtml(logoUrl)}" alt="" aria-hidden="true">`
+      : "";
     return `
       <div class="panel-header" data-drag-handle="true">
         <div class="header-title">
-          <img class="header-logo" src="${EscapeHtml(logoUrl)}" alt="" aria-hidden="true">
+          ${logo}
           <h1 class="title">${EscapeHtml(title)}</h1>
         </div>
         <div class="header-actions">
           <button type="button" class="header-icon gear-btn" data-action="open-themes" title="Themes" aria-label="Themes">&#9881;</button>
-          <button type="button" class="header-icon close-x" data-action="close-x" title="Close" aria-label="Close">\u00d7</button>
+          <button type="button" class="header-icon close-x" data-action="close-x" title="Close" aria-label="Close">×</button>
         </div>
       </div>
     `;
   }
 
-  async function ReadStoredPanelState() {
-    if (!panelStateStorageKey) {
-      return null;
-    }
-
+  function ReadPanelSession() {
     try {
-      const result = await chrome.storage.local.get(panelStateStorageKey);
-      const state = result[panelStateStorageKey];
+      const raw = window.sessionStorage.getItem(PANEL_SESSION_KEY);
+      const state = raw ? JSON.parse(raw) : null;
       if (!state || typeof state !== "object") {
         return null;
       }
       return {
         open: state.open === true,
         view: typeof state.view === "string" ? state.view : "menu",
-        left: Number.isFinite(Number(state.left)) ? Number(state.left) : null,
-        top: Number.isFinite(Number(state.top)) ? Number(state.top) : null,
+        left: Number.isFinite(state.left) ? state.left : null,
+        top: Number.isFinite(state.top) ? state.top : null,
       };
     } catch (e) {
       return null;
     }
   }
 
-  function WriteStoredPanelState() {
-    if (!panelStateStorageKey) {
+  function WritePanelSession() {
+    if (!panelState.open) {
       return;
     }
-
-    chrome.storage.local.set({ [panelStateStorageKey]: panelSessionState }).catch(() => {});
+    try {
+      window.sessionStorage.setItem(PANEL_SESSION_KEY, JSON.stringify(panelState));
+    } catch (e) {}
   }
 
-  function RestorePanelView(restoredView) {
-    const view = restoredView || ReadPanelSessionValue(PANEL_VIEW_SESSION_KEY) || "menu";
+  function ClearPanelSession() {
+    try {
+      window.sessionStorage.removeItem(PANEL_SESSION_KEY);
+      LEGACY_PANEL_SESSION_KEYS.forEach((key) => window.sessionStorage.removeItem(key));
+    } catch (e) {}
+  }
+
+  function RestorePanelFromSession() {
+    const saved = ReadPanelSession();
+    if (!saved?.open) {
+      return;
+    }
+
+    panelState = { ...saved, open: true };
+    EnsureOverlay();
+    UpdateObserver();
+    RestorePanelView(saved.view);
+  }
+
+  function RestorePanelView(view) {
     if (view === "themes") {
       RenderThemePanel();
-      return;
-    }
-    if (view === "rules") {
+    } else if (view === "rules") {
       RenderRulesListPanel();
-      return;
-    }
-    if (view === "manual") {
+    } else if (view === "manual") {
       RenderManualPanel();
-      return;
+    } else {
+      RenderMenuPanel();
     }
-    if (view === "picker") {
-      pickerActive = true;
-      AddPickerListeners();
-      RenderPickerPanel();
-      return;
-    }
-    RenderMenuPanel();
   }
 
   function SetPanelView(view) {
-    panelSessionState.open = true;
-    panelSessionState.view = view;
-    try {
-      window.sessionStorage.setItem(PANEL_OPEN_SESSION_KEY, "1");
-      window.sessionStorage.setItem(PANEL_VIEW_SESSION_KEY, view);
-    } catch (e) {}
-    WriteStoredPanelState();
+    panelState.open = true;
+    panelState.view = view;
+    WritePanelSession();
   }
 
-  function ReadPanelSessionValue(key) {
-    try {
-      return window.sessionStorage.getItem(key);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function SavePanelPosition() {
-    if (!panelElement || !panelSessionState.open) {
-      return;
-    }
-
-    const rect = panelElement.getBoundingClientRect();
-    panelSessionState.open = true;
-    panelSessionState.left = Math.round(rect.left);
-    panelSessionState.top = Math.round(rect.top);
-    try {
-      window.sessionStorage.setItem(PANEL_POSITION_SESSION_KEY, JSON.stringify({
-        left: panelSessionState.left,
-        top: panelSessionState.top,
-      }));
-    } catch (e) {}
-    WriteStoredPanelState();
-  }
-
-  function RestorePanelPosition() {
+  function RenderPanel(view, title, bodyHtml) {
     if (!panelElement) {
-      return;
+      return false;
     }
 
-    const value = ReadPanelSessionValue(PANEL_POSITION_SESSION_KEY);
-    let position = { left: panelSessionState.left, top: panelSessionState.top };
-    if (value) {
-      try {
-        position = JSON.parse(value);
-      } catch (e) {}
+    if (view !== "picker") {
+      StopPicker();
     }
+    SetHighlight(null);
+    SetPanelView(view);
+    panelElement.innerHTML = `
+      ${PanelHeader(title)}
+      <div class="panel-body">${bodyHtml}</div>
+    `;
+    BindPanelDragging();
+    return true;
+  }
 
-    const left = Number(position?.left);
-    const top = Number(position?.top);
-    if (!Number.isFinite(left) || !Number.isFinite(top)) {
-      return;
-    }
-
-    const maxLeft = Math.max(8, window.innerWidth - panelElement.offsetWidth - 8);
-    const maxTop = Math.max(8, window.innerHeight - panelElement.offsetHeight - 8);
-    panelElement.style.left = `${Clamp(left, 8, maxLeft)}px`;
-    panelElement.style.top = `${Clamp(top, 8, maxTop)}px`;
-    panelElement.style.right = "auto";
+  function CreateStatusSetter(statusElement) {
+    return (text, isError) => {
+      if (!statusElement) return;
+      statusElement.textContent = text || "";
+      statusElement.classList.toggle("error", Boolean(isError));
+    };
   }
 
   function RenderThemePanel() {
-    if (!panelElement) {
+    const cards = THEMES.map((theme) => RenderThemeCard(theme)).join("");
+    const rendered = RenderPanel("themes", "Themes", `
+      <p class="muted">Theme is global. Rules still stay saved per site.</p>
+      <div class="theme-grid">${cards}</div>
+      <div class="buttons stack">
+        <button type="button" class="secondary" data-action="themes-back">Back</button>
+      </div>
+    `);
+    if (!rendered) {
       return;
     }
-
-    SetPanelView("themes");
-
-    const cards = THEMES.map((theme) => RenderThemeCard(theme)).join("");
-    panelElement.innerHTML = `
-      ${PanelHeader("Themes")}
-      <div class="panel-body">
-        <p class="muted">Theme is global. Rules still stay saved per site.</p>
-        <div class="theme-grid">${cards}</div>
-        <div class="buttons stack">
-          <button type="button" class="secondary" data-action="themes-back">Back</button>
-        </div>
-      </div>
-    `;
-
-    BindPanelDragging();
 
     panelElement
       .querySelector('[data-action="themes-back"]')
@@ -1361,7 +1662,9 @@
     panelElement.querySelectorAll(".theme-card").forEach((button) => {
       button.addEventListener("click", async () => {
         const themeId = button.getAttribute("data-theme-id");
-        await SaveThemeId(themeId);
+        try {
+          await SaveThemeId(themeId);
+        } catch (error) {}
         RenderThemePanel();
       });
     });
@@ -1398,67 +1701,50 @@
   }
 
   function RenderPickerPanel(message) {
-    if (!panelElement) {
+    const rendered = RenderPanel("picker", "Pick an element", `
+      <p class="copy">${EscapeHtml(message || "Hover an element on the page, then click it.")}</p>
+      <p class="muted">Press Esc to go back, or use the X to close.</p>
+      <div class="buttons stack">
+        <button type="button" class="secondary" data-action="back-to-menu">Back</button>
+      </div>
+    `);
+    if (!rendered) {
       return;
     }
 
-    SetPanelView("picker");
+    if (!pickerActive) {
+      pickerActive = true;
+      AddPickerListeners();
+    }
 
-    panelElement.innerHTML = `
-      ${PanelHeader("Pick an element")}
-      <div class="panel-body">
-        <p class="copy">${EscapeHtml(message || "Hover an element on the page, then click it.")}</p>
-        <p class="muted">Press Esc to go back, or use the X to close.</p>
-        <div class="buttons stack">
-          <button type="button" class="secondary" data-action="back-to-menu">Back</button>
-        </div>
-      </div>
-    `;
-
-    BindPanelDragging();
     panelElement
       .querySelector('[data-action="back-to-menu"]')
-      ?.addEventListener("click", () => {
-        StopPickerKeepPanel();
-        RenderMenuPanel();
-      });
+      ?.addEventListener("click", () => RenderMenuPanel());
   }
 
   function RenderMenuPanel(statusText) {
-    if (!panelElement) {
-      return;
-    }
-
-    SetPanelView("menu");
-
     const ruleCount = activeRules.length;
     const defaultStatus = `${ruleCount} rule${ruleCount === 1 ? "" : "s"} on ${pageKey || "this page"}`;
 
-    panelElement.innerHTML = `
-      ${PanelHeader("Sticky Inspect")}
-      <div class="panel-body">
-        <p class="muted" data-role="menu-status">${EscapeHtml(statusText || defaultStatus)}</p>
-        <div class="buttons">
-          <button type="button" class="primary" data-action="menu-pick">Pick element</button>
-          <button type="button" class="secondary" data-action="menu-manual">Add manually</button>
-          <button type="button" class="secondary" data-action="menu-rules">Rules (${ruleCount})</button>
-          <button type="button" class="secondary" data-action="menu-apply">Reapply</button>
-        </div>
-        <p class="status"></p>
+    const rendered = RenderPanel("menu", "Sticky Inspect", `
+      <p class="muted" data-role="menu-status">${EscapeHtml(statusText || defaultStatus)}</p>
+      <div class="buttons">
+        <button type="button" class="primary" data-action="menu-pick">Pick element</button>
+        <button type="button" class="secondary" data-action="menu-manual">Add manually</button>
+        <button type="button" class="secondary" data-action="menu-rules">Rules (${ruleCount})</button>
+        <button type="button" class="secondary" data-action="menu-apply">Reapply</button>
       </div>
-    `;
+      <p class="status"></p>
+    `);
+    if (!rendered) {
+      return;
+    }
 
-    BindPanelDragging();
-
-    const status = panelElement.querySelector(".status");
-    const SetStatus = (text, isError) => {
-      status.textContent = text || "";
-      status.classList.toggle("error", Boolean(isError));
-    };
+    const SetStatus = CreateStatusSetter(panelElement.querySelector(".status"));
 
     panelElement
       .querySelector('[data-action="menu-pick"]')
-      ?.addEventListener("click", () => StartPicker());
+      ?.addEventListener("click", () => RenderPickerPanel());
 
     panelElement
       .querySelector('[data-action="menu-manual"]')
@@ -1471,86 +1757,113 @@
     panelElement
       .querySelector('[data-action="menu-apply"]')
       ?.addEventListener("click", async () => {
-        const result = await ApplyRulesNow();
-        if (result.ok) {
-          SetStatus(`Reapplied ${result.appliedCount} change${result.appliedCount === 1 ? "" : "s"}.`);
-        } else {
-          SetStatus(result.error || "Failed to reapply.", true);
+        try {
+          const result = await ApplyRulesNow();
+          if (result.ok) {
+            SetStatus(`Reapplied rules to ${result.appliedCount} element${result.appliedCount === 1 ? "" : "s"}.`);
+          } else {
+            SetStatus(result.error || "Failed to reapply.", true);
+          }
+        } catch (error) {
+          SetStatus(DescribeError(error), true);
         }
       });
   }
 
   function RenderRulesListPanel(statusText) {
-    if (!panelElement) {
-      return;
-    }
-
-    SetPanelView("rules");
-
     const ruleCount = activeRules.length;
+    let unmatchedCount = 0;
     const rulesHtml = ruleCount
       ? `<ul class="rules-list">${activeRules
-          .map((rule, idx) => `
-            <li>
-              <span class="rule-tag">${EscapeHtml(ActionLabel(rule.action))}</span>
-              <span class="rule-sel" title="${EscapeHtml(rule.selector)}">${EscapeHtml(rule.selector)}</span>
-              <button class="rule-edit" data-rule-index="${idx}" title="Edit rule" aria-label="Edit">\u270e</button>
-              <button class="rule-del" data-rule-index="${idx}" title="Delete rule" aria-label="Delete">\u00d7</button>
-            </li>
-          `)
+          .map((rule) => {
+            const key = GetRuleKey(rule);
+            const isCss = rule.action === "injectCSS";
+            const label = isCss ? SummarizeCss(rule.value) : rule.selector || "";
+            const matchCount = isCss ? null : CountMatches(rule.selector);
+            const unmatched = matchCount === 0 && rule.action !== "remove";
+            if (unmatched) unmatchedCount += 1;
+            const matchText = matchCount === null ? "" : ` (${matchCount} match${matchCount === 1 ? "" : "es"} on this page)`;
+            return `
+              <li class="${unmatched ? "no-match" : ""}">
+                <span class="rule-tag">${EscapeHtml(ActionLabel(rule.action))}</span>
+                <span class="rule-sel" title="${EscapeHtml(label + matchText)}">${EscapeHtml(label)}</span>
+                <button class="rule-edit" data-rule-key="${EscapeHtml(key)}" title="Edit rule" aria-label="Edit">✎</button>
+                <button class="rule-del" data-rule-key="${EscapeHtml(key)}" title="Delete rule" aria-label="Delete">×</button>
+              </li>
+            `;
+          })
           .join("")}</ul>`
       : `<div class="empty">No saved rules yet.</div>`;
 
-    panelElement.innerHTML = `
-      ${PanelHeader(`Rules (${ruleCount})`)}
-      <div class="panel-body">
-        <p class="muted">${EscapeHtml(statusText || "Click a rule to edit, \u00d7 to delete.")}</p>
-        ${rulesHtml}
-        <div class="buttons">
-          <button type="button" class="secondary" data-action="rules-back">Back</button>
-          <button type="button" class="danger" data-action="rules-clear">Clear all</button>
-        </div>
-        <p class="status"></p>
-      </div>
-    `;
+    const defaultStatus = unmatchedCount
+      ? "Faded rules match nothing on this page. Click ✎ to edit, × to delete."
+      : "Click ✎ to edit a rule, × to delete it.";
 
-    BindPanelDragging();
+    const rendered = RenderPanel("rules", `Rules (${ruleCount})`, `
+      <p class="muted">${EscapeHtml(statusText || defaultStatus)}</p>
+      ${rulesHtml}
+      <div class="buttons">
+        <button type="button" class="secondary" data-action="rules-back">Back</button>
+        <button type="button" class="danger" data-action="rules-clear"${ruleCount ? "" : " disabled"}>Clear all</button>
+      </div>
+      <p class="status"></p>
+    `);
+    if (!rendered) {
+      return;
+    }
+
+    const SetStatus = CreateStatusSetter(panelElement.querySelector(".status"));
 
     panelElement
       .querySelector('[data-action="rules-back"]')
       ?.addEventListener("click", () => RenderMenuPanel());
 
-    panelElement
-      .querySelector('[data-action="rules-clear"]')
-      ?.addEventListener("click", async () => {
-        const result = await ClearRules();
-        if (result.ok) {
-          RenderRulesListPanel("All rules cleared.");
-        }
-      });
+    const clearButton = panelElement.querySelector('[data-action="rules-clear"]');
+    let clearArmedUntil = 0;
+    clearButton?.addEventListener("click", async () => {
+      if (Date.now() > clearArmedUntil) {
+        clearArmedUntil = Date.now() + CLEAR_CONFIRM_MS;
+        clearButton.textContent = "Click again to clear";
+        window.setTimeout(() => {
+          if (clearButton.isConnected) clearButton.textContent = "Clear all";
+        }, CLEAR_CONFIRM_MS);
+        return;
+      }
+
+      try {
+        await ClearRules();
+        RenderRulesListPanel("All rules cleared. Reload the page to restore the original content.");
+      } catch (error) {
+        SetStatus(DescribeError(error), true);
+      }
+    });
 
     panelElement.querySelectorAll(".rule-del").forEach((button) => {
       button.addEventListener("click", async () => {
-        const idx = Number(button.getAttribute("data-rule-index"));
-        if (Number.isInteger(idx)) {
-          await DeleteRuleAt(idx);
-          RenderRulesListPanel("Rule deleted.");
+        const key = button.getAttribute("data-rule-key");
+        const rule = activeRules.find((candidate) => GetRuleKey(candidate) === key);
+        try {
+          await DeleteRule(key);
+          const undoneLive = rule?.action === "injectCSS" || rule?.action === "insertHTML";
+          RenderRulesListPanel(undoneLive ? "Rule deleted." : "Rule deleted. Reload the page to restore the original content.");
+        } catch (error) {
+          SetStatus(DescribeError(error), true);
         }
       });
     });
 
     panelElement.querySelectorAll(".rule-edit").forEach((button) => {
       button.addEventListener("click", () => {
-        const idx = Number(button.getAttribute("data-rule-index"));
-        const rule = activeRules[idx];
+        const key = button.getAttribute("data-rule-key");
+        const rule = activeRules.find((candidate) => GetRuleKey(candidate) === key);
         if (rule) {
           RenderManualPanel({
+            key,
             selector: rule.selector,
             action: rule.action,
             value: rule.value,
             attributeName: rule.attributeName,
             position: rule.position,
-            savedAt: rule.savedAt,
           });
         }
       });
@@ -1558,51 +1871,43 @@
   }
 
   function RenderManualPanel(prefill) {
-    if (!panelElement) {
+    const rendered = RenderPanel("manual", prefill?.key ? "Edit rule" : "Add rule manually", `
+      <label class="field">
+        <span class="label">What do you want to do?</span>
+        <select data-field="action"></select>
+        <p class="hint" data-role="action-hint"></p>
+      </label>
+      <label class="field" data-role="selector-wrapper">
+        <span class="label" data-role="selector-label">CSS selector</span>
+        <input data-field="selector" type="text" placeholder="#id, .class, or paste an HTML element" spellcheck="false">
+        <p class="hint" data-role="selector-hint">Type a CSS selector or paste an HTML element (we'll convert it).</p>
+      </label>
+      <label class="field hidden" data-role="attribute-name-wrapper">
+        <span class="label">Attribute name</span>
+        <input data-field="attributeName" type="text" placeholder="style" spellcheck="false">
+      </label>
+      <label class="field hidden" data-role="position-wrapper">
+        <span class="label">Position</span>
+        <select data-field="position">
+          <option value="append">Inside (at end)</option>
+          <option value="prepend">Inside (at start)</option>
+          <option value="before">Before element</option>
+          <option value="after">After element</option>
+        </select>
+      </label>
+      <label class="field" data-role="value-wrapper">
+        <span class="label" data-role="value-label">Value</span>
+        <textarea data-field="value" placeholder="<div>Hello</div>"></textarea>
+      </label>
+      <div class="buttons">
+        <button type="button" class="primary" data-action="save-rule">Save rule</button>
+        <button type="button" class="secondary" data-action="back-to-menu">Back</button>
+      </div>
+      <p class="status"></p>
+    `);
+    if (!rendered) {
       return;
     }
-
-    SetPanelView("manual");
-
-    panelElement.innerHTML = `
-      ${PanelHeader("Add rule manually")}
-      <div class="panel-body">
-        <label class="field">
-          <span class="label">What do you want to do?</span>
-          <select data-field="action"></select>
-          <p class="hint" data-role="action-hint"></p>
-        </label>
-        <label class="field" data-role="selector-wrapper">
-          <span class="label" data-role="selector-label">CSS selector</span>
-          <input data-field="selector" type="text" placeholder="#id, .class, or paste an HTML element" spellcheck="false">
-          <p class="hint" data-role="selector-hint">Type a CSS selector or paste an HTML element (we'll convert it).</p>
-        </label>
-        <label class="field hidden" data-role="attribute-name-wrapper">
-          <span class="label">Attribute name</span>
-          <input data-field="attributeName" type="text" placeholder="style">
-        </label>
-        <label class="field hidden" data-role="position-wrapper">
-          <span class="label">Position</span>
-          <select data-field="position">
-            <option value="append">Inside (at end)</option>
-            <option value="prepend">Inside (at start)</option>
-            <option value="before">Before element</option>
-            <option value="after">After element</option>
-          </select>
-        </label>
-        <label class="field" data-role="value-wrapper">
-          <span class="label" data-role="value-label">Value</span>
-          <textarea data-field="value" placeholder="<div>Hello</div>"></textarea>
-        </label>
-        <div class="buttons">
-          <button type="button" class="primary" data-action="save-rule">Save rule</button>
-          <button type="button" class="secondary" data-action="back-to-menu">Back</button>
-        </div>
-        <p class="status"></p>
-      </div>
-    `;
-
-    BindPanelDragging();
 
     const selectorInput = panelElement.querySelector('[data-field="selector"]');
     const actionSelect = panelElement.querySelector('[data-field="action"]');
@@ -1616,7 +1921,8 @@
     const selectorHint = panelElement.querySelector('[data-role="selector-hint"]');
     const valueLabel = panelElement.querySelector('[data-role="value-label"]');
     const actionHint = panelElement.querySelector('[data-role="action-hint"]');
-    const status = panelElement.querySelector(".status");
+    const SetStatus = CreateStatusSetter(panelElement.querySelector(".status"));
+    let editingKey = prefill?.key || null;
 
     actionSelect.innerHTML = window.__StickyInspectActions
       .DefaultActions()
@@ -1637,6 +1943,7 @@
       const value = selectorInput.value.trim();
       if (!value) {
         selectorHint.textContent = "Type a CSS selector or paste an HTML element (we'll convert it).";
+        SetHighlight(null);
         return;
       }
       let count = 0;
@@ -1647,20 +1954,22 @@
         sample = matches[0];
       } catch (e) {
         selectorHint.textContent = "Invalid selector.";
+        SetHighlight(null);
         return;
       }
       if (!count) {
         selectorHint.textContent = "No matches on this page.";
+        SetHighlight(null);
       } else {
         selectorHint.textContent = `${count} match${count === 1 ? "" : "es"} on this page.`;
         if (sample) {
-          DrawHighlight(sample);
+          SetHighlight(sample);
           PrefillValueFromSample(sample);
         }
       }
     }
 
-    let valueDirty = Boolean(prefill?.value);
+    let valueDirty = prefill?.value !== undefined;
     valueInput.addEventListener("input", () => {
       valueDirty = true;
     });
@@ -1674,8 +1983,8 @@
         valueInput.value = sample.innerHTML ?? "";
       } else if (action === "setValue" && "value" in sample) {
         valueInput.value = sample.value ?? "";
-      } else if (action === "setAttribute" && attributeInput.value) {
-        valueInput.value = sample.getAttribute(attributeInput.value) ?? "";
+      } else if (action === "setAttribute" && attributeInput.value && IsValidAttributeName(attributeInput.value.trim())) {
+        valueInput.value = sample.getAttribute(attributeInput.value.trim()) ?? "";
       }
     }
 
@@ -1710,8 +2019,13 @@
       actionHint.textContent = opt?.dataset.hint || "";
       valueLabel.textContent = VALUE_LABELS[action] || "Value";
       valueInput.placeholder = VALUE_PLACEHOLDERS[action] || "";
-      RefreshSelectorHint();
+      if (isCSS) {
+        SetHighlight(null);
+      } else {
+        RefreshSelectorHint();
+      }
     }
+
     function HtmlToSelector(input) {
       const trimmed = (input || "").trim();
       if (!trimmed.startsWith("<")) return null;
@@ -1735,20 +2049,12 @@
       }
     }
 
-    function FindExistingRuleIndex(selector, action, attributeName) {
-      const probe = { selector, action, attributeName: attributeName || "" };
-      const id = GetRuleIdentity(probe);
-      return activeRules.findIndex((r) => GetRuleIdentity(r) === id);
-    }
-
     function MaybeNormalizeSelector() {
-      const value = selectorInput.value;
-      const parsed = HtmlToSelector(value);
+      const parsed = HtmlToSelector(selectorInput.value);
       if (parsed) {
         selectorInput.value = parsed;
         RefreshSelectorHint();
-        status.classList.remove("error");
-        status.textContent = `Detected pasted HTML, using selector ${parsed}.`;
+        SetStatus(`Detected pasted HTML, using selector ${parsed}.`);
         return true;
       }
       return false;
@@ -1764,142 +2070,95 @@
 
     panelElement
       .querySelector('[data-action="back-to-menu"]')
-      ?.addEventListener("click", () => {
-        if (highlightBox) highlightBox.style.display = "none";
-        RenderMenuPanel();
-      });
+      ?.addEventListener("click", () => RenderMenuPanel());
 
     panelElement
       .querySelector('[data-action="save-rule"]')
       ?.addEventListener("click", async () => {
-        const action = actionSelect.value;
-        const isCSS = action === "injectCSS";
         MaybeNormalizeSelector();
-        const selector = selectorInput.value.trim();
-
-        if (!isCSS) {
-          if (!selector) {
-            status.textContent = "Selector is required.";
-            status.classList.add("error");
-            return;
-          }
-          try {
-            document.querySelector(selector);
-          } catch (e) {
-            status.textContent = "Invalid selector. Try pasting HTML or use a simpler selector like #id or .class.";
-            status.classList.add("error");
-            return;
-          }
-
-          const editingSavedAt = prefill?.savedAt;
-          const dupeIndex = FindExistingRuleIndex(selector, action, attributeInput.value.trim());
-          if (dupeIndex !== -1 && activeRules[dupeIndex].savedAt !== editingSavedAt) {
-            const existing = activeRules[dupeIndex];
-            RenderManualPanel({
-              selector: existing.selector,
-              action: existing.action,
-              value: existing.value,
-              attributeName: existing.attributeName,
-              position: existing.position,
-              savedAt: existing.savedAt,
-            });
-            return;
-          }
-        }
-
-        const rule = {
-          selector: isCSS ? "" : selector,
-          action,
+        const { rule, error } = BuildRule({
+          action: actionSelect.value,
+          selector: selectorInput.value,
           value: valueInput.value,
-          attributeName: attributeInput.value.trim(),
+          attributeName: attributeInput.value,
           position: positionSelect.value,
-          savedAt: prefill?.savedAt || Date.now(),
-        };
-
-        if (action === "setAttribute" && !rule.attributeName) {
-          status.textContent = "Attribute name is required.";
-          status.classList.add("error");
+        });
+        if (error) {
+          SetStatus(error, true);
           return;
         }
-        if (action === "remove") {
-          delete rule.value;
-          delete rule.attributeName;
-          delete rule.position;
-        } else if (action === "insertHTML") {
-          delete rule.attributeName;
-        } else if (action === "injectCSS") {
-          delete rule.attributeName;
-          delete rule.position;
-          delete rule.selector;
-        } else if (action !== "setAttribute") {
-          delete rule.attributeName;
-          delete rule.position;
-        } else {
-          delete rule.position;
-        }
 
-        const newCount = await SaveRule(rule);
-        ApplyRule(rule);
-        status.classList.remove("error");
-        status.textContent = `Saved. ${newCount} rule${newCount === 1 ? "" : "s"} total.`;
+        const identity = GetRuleIdentity(rule);
+        const replacesOther = activeRules.some((existing) => {
+          return GetRuleIdentity(existing) === identity && GetRuleKey(existing) !== editingKey;
+        });
+
+        try {
+          const newCount = await SaveRule(rule, editingKey);
+          editingKey = GetRuleKey(rule);
+          const note = replacesOther ? " Replaced the existing rule for this selector and action." : "";
+          SetStatus(`Saved. ${newCount} rule${newCount === 1 ? "" : "s"} total.${note}`);
+        } catch (saveError) {
+          SetStatus(DescribeError(saveError), true);
+        }
       });
 
     SyncFields();
   }
 
   function RenderEditorPanel(element) {
-    if (!panelElement) {
-      return;
-    }
-
-    SetPanelView("picker");
-
     const selector = BuildSelector(element);
     const currentText = element.textContent ?? "";
     const currentHTML = element.innerHTML ?? "";
-    const currentValue = "value" in element ? element.value ?? "" : currentText;
+    const currentValue = "value" in element ? String(element.value ?? "") : currentText;
     const available = window.__StickyInspectActions.GetApplicableActions(element);
+    const parent = element.parentElement;
+    const canSelectParent = Boolean(parent && parent !== document.documentElement && parent !== document.body);
 
     const actionOptions = available
       .map((a) => `<option value="${a.value}" data-hint="${EscapeHtml(a.hint || "")}">${EscapeHtml(a.label)}</option>`)
       .join("");
 
-    panelElement.innerHTML = `
-      ${PanelHeader("Edit element")}
-      <div class="panel-body">
-        <p class="muted">${EscapeHtml(`<${element.localName}>`)} \u2014 ${available.length} compatible action${available.length === 1 ? "" : "s"}</p>
-        <div class="selector">${EscapeHtml(selector)}</div>
-        <label class="field">
-          <span class="label">Action</span>
-          <select data-field="action">${actionOptions}</select>
-          <p class="hint" data-role="action-hint"></p>
-        </label>
-        <label class="field hidden" data-role="attribute-name-wrapper">
-          <span class="label">Attribute name</span>
-          <input data-field="attributeName" type="text" placeholder="style">
-        </label>
-        <label class="field hidden" data-role="position-wrapper">
-          <span class="label">Position</span>
-          <select data-field="position">
-            <option value="append">Inside (at end)</option>
-            <option value="prepend">Inside (at start)</option>
-            <option value="before">Before element</option>
-            <option value="after">After element</option>
-          </select>
-        </label>
-        <label class="field" data-role="value-wrapper">
-          <span class="label">Value</span>
-          <textarea data-field="value"></textarea>
-        </label>
-        <div class="buttons">
-          <button type="button" class="primary" data-action="save-rule">Save rule</button>
-          <button type="button" class="secondary" data-action="back-to-picker">Back</button>
-        </div>
-        <p class="status"></p>
+    const rendered = RenderPanel("editor", "Edit element", `
+      <div class="element-meta">
+        <p class="muted">${EscapeHtml(`<${element.localName}>`)} — ${available.length} compatible action${available.length === 1 ? "" : "s"}</p>
+        ${canSelectParent ? `<button type="button" class="ghost" data-action="select-parent" title="Edit the element that contains this one">Select parent</button>` : ""}
       </div>
-    `;
+      <div class="selector">${EscapeHtml(selector)}</div>
+      <label class="field">
+        <span class="label">Action</span>
+        <select data-field="action">${actionOptions}</select>
+        <p class="hint" data-role="action-hint"></p>
+      </label>
+      <label class="field hidden" data-role="attribute-name-wrapper">
+        <span class="label">Attribute name</span>
+        <input data-field="attributeName" type="text" placeholder="style" spellcheck="false">
+      </label>
+      <label class="field hidden" data-role="position-wrapper">
+        <span class="label">Position</span>
+        <select data-field="position">
+          <option value="append">Inside (at end)</option>
+          <option value="prepend">Inside (at start)</option>
+          <option value="before">Before element</option>
+          <option value="after">After element</option>
+        </select>
+      </label>
+      <label class="field" data-role="value-wrapper">
+        <span class="label">Value</span>
+        <textarea data-field="value"></textarea>
+      </label>
+      <div class="buttons">
+        <button type="button" class="primary" data-action="save-rule">Save rule</button>
+        <button type="button" class="secondary" data-action="back-to-picker">Back</button>
+      </div>
+      <p class="status"></p>
+    `);
+    if (!rendered) {
+      return;
+    }
 
-    BindPanelDragging();
+    SetHighlight(element);
+
     const actionSelect = panelElement.querySelector('[data-field="action"]');
     const valueInput = panelElement.querySelector('[data-field="value"]');
     const attributeNameInput = panelElement.querySelector('[data-field="attributeName"]');
@@ -1908,7 +2167,13 @@
     const attributeWrapper = panelElement.querySelector('[data-role="attribute-name-wrapper"]');
     const positionWrapper = panelElement.querySelector('[data-role="position-wrapper"]');
     const actionHint = panelElement.querySelector('[data-role="action-hint"]');
-    const statusElement = panelElement.querySelector(".status");
+    const SetStatus = CreateStatusSetter(panelElement.querySelector(".status"));
+    let editingKey = null;
+
+    function ReadElementAttribute(name) {
+      const attributeName = name.trim();
+      return IsValidAttributeName(attributeName) ? element.getAttribute(attributeName) ?? "" : "";
+    }
 
     function SyncFields() {
       const action = actionSelect.value;
@@ -1930,69 +2195,89 @@
         if (!attributeNameInput.value) {
           attributeNameInput.value = "style";
         }
-        valueInput.value = element.getAttribute(attributeNameInput.value) ?? "";
+        valueInput.value = ReadElementAttribute(attributeNameInput.value);
       }
     }
 
     actionSelect.addEventListener("change", SyncFields);
     attributeNameInput.addEventListener("input", () => {
       if (actionSelect.value === "setAttribute") {
-        valueInput.value = element.getAttribute(attributeNameInput.value) ?? "";
+        valueInput.value = ReadElementAttribute(attributeNameInput.value);
       }
     });
 
     SyncFields();
 
     panelElement
+      .querySelector('[data-action="select-parent"]')
+      ?.addEventListener("click", () => RenderEditorPanel(parent));
+
+    panelElement
       .querySelector('[data-action="back-to-picker"]')
       ?.addEventListener("click", () => {
-        selectedElement = null;
-        if (!pickerActive) {
-          pickerActive = true;
-          AddPickerListeners();
-        }
         RenderPickerPanel("Hover another element and click it.");
       });
 
     panelElement
       .querySelector('[data-action="save-rule"]')
       ?.addEventListener("click", async () => {
-        const action = actionSelect.value;
-        const rule = {
+        const { rule, error } = BuildRule({
+          action: actionSelect.value,
           selector,
-          action,
           value: valueInput.value,
-          attributeName: attributeNameInput.value.trim(),
+          attributeName: attributeNameInput.value,
           position: positionSelect.value,
-          savedAt: Date.now(),
-        };
-
-        if (action === "setAttribute" && !rule.attributeName) {
-          statusElement.textContent = "Attribute name is required.";
-          statusElement.classList.add("error");
+        });
+        if (error) {
+          SetStatus(error, true);
           return;
         }
 
-        if (action === "remove") {
-          delete rule.value;
-          delete rule.attributeName;
-          delete rule.position;
-        } else if (action === "insertHTML") {
-          delete rule.attributeName;
-        } else if (action !== "setAttribute") {
-          delete rule.attributeName;
-          delete rule.position;
-        } else {
-          delete rule.position;
+        try {
+          const newCount = await SaveRule(rule, editingKey);
+          editingKey = GetRuleKey(rule);
+          SetStatus(`Saved. ${newCount} rule${newCount === 1 ? "" : "s"} total.`);
+        } catch (saveError) {
+          SetStatus(DescribeError(saveError), true);
         }
-
-        const newCount = await SaveRule(rule);
-        ApplyRule(rule);
-        statusElement.classList.remove("error");
-        statusElement.textContent = `Saved. ${newCount} rule${newCount === 1 ? "" : "s"} total.`;
       });
+  }
 
-    SyncFields();
+  function BuildRule(fields) {
+    const action = fields.action;
+    const rule = { action, savedAt: NextSavedAt() };
+
+    if (action !== "injectCSS") {
+      const selector = String(fields.selector || "").trim();
+      if (!selector) {
+        return { error: "Selector is required." };
+      }
+      if (!IsValidSelector(selector)) {
+        return { error: "Invalid selector. Try pasting HTML or use a simpler selector like #id or .class." };
+      }
+      rule.selector = selector;
+    }
+
+    if (action !== "remove") {
+      rule.value = String(fields.value ?? "");
+    }
+
+    if (action === "setAttribute") {
+      const attributeName = String(fields.attributeName || "").trim();
+      if (!attributeName) {
+        return { error: "Attribute name is required." };
+      }
+      if (!IsValidAttributeName(attributeName)) {
+        return { error: `"${attributeName}" is not a valid attribute name.` };
+      }
+      rule.attributeName = attributeName;
+    }
+
+    if (action === "insertHTML") {
+      rule.position = fields.position || "append";
+    }
+
+    return { rule };
   }
 
   function ActionLabel(action) {
@@ -2008,51 +2293,37 @@
     }
   }
 
-  async function DeleteRuleAt(index) {
-    if (!storageKey) return;
-    if (index < 0 || index >= activeRules.length) return;
-    activeRules.splice(index, 1);
-    RefreshRuleCloak();
-    await chrome.storage.local.set({ [storageKey]: activeRules });
+  function SummarizeCss(css) {
+    const summary = String(css || "").replace(/\s+/g, " ").trim();
+    return summary ? summary.slice(0, 80) : "(empty CSS)";
   }
 
-  function StopPicker() {
-    pickerActive = false;
-    selectedElement = null;
-    highlightedElement = null;
-    panelDragState = null;
-    RemovePickerListeners();
-
-    if (highlightBox) {
-      highlightBox.style.display = "none";
-    }
-
-    if (panelHost?.isConnected) {
-      panelHost.remove();
-    }
-
-    panelHost = null;
-    highlightBox = null;
-    panelElement = null;
-
+  function CountMatches(selector) {
     try {
-      window.sessionStorage.removeItem(PANEL_OPEN_SESSION_KEY);
-      window.sessionStorage.removeItem(PANEL_VIEW_SESSION_KEY);
-      window.sessionStorage.removeItem(PANEL_POSITION_SESSION_KEY);
-    } catch (e) {}
-    panelSessionState = { open: false, view: "menu", left: null, top: null };
-    if (panelStateStorageKey) {
-      chrome.storage.local.remove(panelStateStorageKey).catch(() => {});
+      return document.querySelectorAll(selector).length;
+    } catch (error) {
+      return 0;
     }
   }
 
-  function StopPickerKeepPanel() {
-    pickerActive = false;
-    selectedElement = null;
-    highlightedElement = null;
-    RemovePickerListeners();
-    if (highlightBox) {
-      highlightBox.style.display = "none";
+  function IsValidSelector(selector) {
+    try {
+      document.createDocumentFragment().querySelector(selector);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function IsValidAttributeName(name) {
+    if (!name) {
+      return false;
+    }
+    try {
+      document.createElement("div").setAttribute(name, "");
+      return true;
+    } catch (error) {
+      return false;
     }
   }
 
@@ -2063,15 +2334,41 @@
     }
 
     handle.addEventListener("pointerdown", BeginPanelDrag);
-    if (skipNextPositionRestore) {
-      skipNextPositionRestore = false;
-      panelElement.style.left = "";
-      panelElement.style.top = "";
-      panelElement.style.right = "24px";
+    ApplyPanelPosition();
+  }
+
+  function GetViewportSize() {
+    const root = document.compatMode === "BackCompat" ? document.body : document.documentElement;
+    return {
+      width: Math.min(window.innerWidth, root?.clientWidth || window.innerWidth),
+      height: Math.min(window.innerHeight, root?.clientHeight || window.innerHeight),
+    };
+  }
+
+  function ApplyPanelPosition() {
+    if (!panelElement) {
       return;
     }
-    RestorePanelPosition();
-    requestAnimationFrame(() => RestorePanelPosition());
+
+    const { left, top } = panelState;
+    if (!Number.isFinite(left) || !Number.isFinite(top)) {
+      panelElement.style.left = "";
+      panelElement.style.top = "";
+      panelElement.style.right = "";
+      return;
+    }
+
+    const viewport = GetViewportSize();
+    const maxLeft = Math.max(PANEL_MARGIN, viewport.width - panelElement.offsetWidth - PANEL_MARGIN);
+    const maxTop = Math.max(PANEL_MARGIN, viewport.height - panelElement.offsetHeight - PANEL_MARGIN);
+    panelElement.style.left = `${Clamp(left, PANEL_MARGIN, maxLeft)}px`;
+    panelElement.style.top = `${Clamp(top, PANEL_MARGIN, maxTop)}px`;
+    panelElement.style.right = "auto";
+  }
+
+  function HandleViewportResize() {
+    ApplyPanelPosition();
+    ScheduleHighlightRedraw();
   }
 
   function BeginPanelDrag(event) {
@@ -2082,6 +2379,7 @@
       return;
     }
 
+    EndPanelDrag();
     const rect = panelElement.getBoundingClientRect();
     panelDragState = {
       offsetX: event.clientX - rect.left,
@@ -2089,10 +2387,6 @@
       pointerId: event.pointerId,
       handle: event.currentTarget,
     };
-
-    panelElement.style.left = `${rect.left}px`;
-    panelElement.style.top = `${rect.top}px`;
-    panelElement.style.right = "auto";
 
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -2103,7 +2397,7 @@
     document.addEventListener("pointercancel", EndPanelDrag, true);
     event.currentTarget.addEventListener("lostpointercapture", EndPanelDrag, true);
     window.addEventListener("blur", EndPanelDrag, true);
-    document.addEventListener("visibilitychange", OnDragVisibilityChange, true);
+    document.addEventListener("visibilitychange", EndPanelDrag, true);
     event.preventDefault();
   }
 
@@ -2111,57 +2405,68 @@
     if (!panelDragState || !panelElement) {
       return;
     }
-    if (panelDragState.pointerId !== undefined && event.pointerId !== panelDragState.pointerId) {
+    if (event.pointerId !== panelDragState.pointerId) {
       return;
     }
-    if (event.buttons !== undefined && event.buttons === 0) {
+    if (event.buttons === 0) {
       EndPanelDrag();
       return;
     }
 
-    const maxLeft = Math.max(8, window.innerWidth - panelElement.offsetWidth - 8);
-    const maxTop = Math.max(8, window.innerHeight - panelElement.offsetHeight - 8);
-    const nextLeft = Clamp(event.clientX - panelDragState.offsetX, 8, maxLeft);
-    const nextTop = Clamp(event.clientY - panelDragState.offsetY, 8, maxTop);
-
-    panelElement.style.left = `${nextLeft}px`;
-    panelElement.style.top = `${nextTop}px`;
-    panelSessionState.open = true;
-    panelSessionState.left = Math.round(nextLeft);
-    panelSessionState.top = Math.round(nextTop);
-    WriteStoredPanelState();
-    try {
-      window.sessionStorage.setItem(PANEL_POSITION_SESSION_KEY, JSON.stringify({
-        left: panelSessionState.left,
-        top: panelSessionState.top,
-      }));
-    } catch (e) {}
-  }
-
-  function OnDragVisibilityChange() {
-    if (document.visibilityState === "hidden") {
-      EndPanelDrag();
-    }
+    panelState.left = Math.round(event.clientX - panelDragState.offsetX);
+    panelState.top = Math.round(event.clientY - panelDragState.offsetY);
+    ApplyPanelPosition();
   }
 
   function EndPanelDrag() {
-    if (panelDragState?.handle && panelDragState.pointerId !== undefined) {
-      try {
-        panelDragState.handle.releasePointerCapture(panelDragState.pointerId);
-      } catch (e) {}
-      panelDragState.handle.removeEventListener("lostpointercapture", EndPanelDrag, true);
-    }
-    SavePanelPosition();
-    panelDragState = null;
     document.removeEventListener("pointermove", OnPanelDragMove, true);
     document.removeEventListener("pointerup", EndPanelDrag, true);
     document.removeEventListener("pointercancel", EndPanelDrag, true);
-    document.removeEventListener("visibilitychange", OnDragVisibilityChange, true);
+    document.removeEventListener("visibilitychange", EndPanelDrag, true);
     window.removeEventListener("blur", EndPanelDrag, true);
+
+    if (!panelDragState) {
+      return;
+    }
+
+    const { handle, pointerId } = panelDragState;
+    panelDragState = null;
+    handle.removeEventListener("lostpointercapture", EndPanelDrag, true);
+    try {
+      handle.releasePointerCapture(pointerId);
+    } catch (e) {}
+
+    if (panelElement && Number.isFinite(panelState.left)) {
+      const rect = panelElement.getBoundingClientRect();
+      panelState.left = Math.round(rect.left);
+      panelState.top = Math.round(rect.top);
+    }
+    WritePanelSession();
   }
 
-  function DrawHighlight(element) {
-    if (!highlightBox || !element?.isConnected) {
+  function SetHighlight(element) {
+    highlightedElement = element || null;
+    DrawHighlight();
+  }
+
+  function ScheduleHighlightRedraw() {
+    if (highlightFrame || !highlightedElement) {
+      return;
+    }
+    highlightFrame = requestAnimationFrame(() => {
+      highlightFrame = 0;
+      DrawHighlight();
+    });
+  }
+
+  function DrawHighlight() {
+    if (!highlightBox) {
+      return;
+    }
+
+    const element = highlightedElement;
+    if (!element?.isConnected) {
+      highlightBox.style.display = "none";
       return;
     }
 
@@ -2252,10 +2557,22 @@
 
   function GetClassSelector(element) {
     const classNames = Array.from(element.classList)
-      .filter((className) => /^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(className))
+      .filter(IsStableClassName)
       .slice(0, 2);
 
     return classNames.length ? `.${classNames.map((name) => CSS.escape(name)).join(".")}` : "";
+  }
+
+  function IsStableClassName(className) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(className)) {
+      return false;
+    }
+    if (/^(css|sc|jsx|svelte|emotion|styled)-/i.test(className)) {
+      return false;
+    }
+    return !className.split(/[-_]+/).some((part) => {
+      return part.length >= 5 && /\d/.test(part) && /[A-Za-z]/.test(part);
+    });
   }
 
   function IsUniqueSelector(selector) {
@@ -2270,7 +2587,7 @@
     return Boolean(pageKey) && SUPPORTED_PROTOCOLS.has(window.location.protocol);
   }
 
-  function GetPageKey(href) {
+  function GetPageKey(href, multipartSuffixes) {
     try {
       const url = new URL(href);
       if (!SUPPORTED_PROTOCOLS.has(url.protocol)) {
@@ -2283,13 +2600,13 @@
         return url.toString();
       }
 
-      return GetRegistrableDomain(url.hostname);
+      return GetRegistrableDomain(url.hostname, multipartSuffixes);
     } catch (error) {
       return null;
     }
   }
 
-  function GetRegistrableDomain(hostname) {
+  function GetRegistrableDomain(hostname, multipartSuffixes) {
     const normalized = hostname.trim().toLowerCase();
 
     if (!normalized) {
@@ -2305,21 +2622,8 @@
       return normalized;
     }
 
-    const knownMultipartSuffixes = new Set([
-      "co.uk",
-      "org.uk",
-      "gov.uk",
-      "ac.uk",
-      "co.jp",
-      "com.au",
-      "net.au",
-      "org.au",
-      "co.nz",
-      "com.br",
-    ]);
-
     const suffix = labels.slice(-2).join(".");
-    if (knownMultipartSuffixes.has(suffix) && labels.length >= 3) {
+    if (multipartSuffixes.has(suffix)) {
       return labels.slice(-3).join(".");
     }
 
@@ -2340,6 +2644,8 @@
     if (document.documentElement) {
       document.documentElement.style.setProperty("visibility", "hidden", "important");
     }
+
+    initialCloakTimer = window.setTimeout(RemoveInitialCloak, INITIAL_CLOAK_MAX_MS);
   }
 
   function RemoveInitialCloak() {
@@ -2347,6 +2653,7 @@
       return;
     }
 
+    window.clearTimeout(initialCloakTimer);
     if (initialCloakElement.isConnected) {
       initialCloakElement.remove();
     }
@@ -2370,7 +2677,10 @@
       }
 
       rootObserver.disconnect();
-      document.documentElement.appendChild(node);
+      if (node === initialCloakElement) {
+        document.documentElement.appendChild(node);
+        document.documentElement.style.setProperty("visibility", "hidden", "important");
+      }
     });
 
     rootObserver.observe(document, {
@@ -2401,8 +2711,31 @@
     });
   }
 
+  function GetExtensionUrl(path) {
+    try {
+      return chrome.runtime.getURL(path);
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function IsExtensionAlive() {
+    try {
+      return Boolean(chrome.runtime?.id);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function DescribeError(error) {
+    if (!IsExtensionAlive()) {
+      return "Sticky Inspect was updated or reloaded. Refresh this page to keep editing.";
+    }
+    return error instanceof Error ? error.message : String(error);
+  }
+
   function EscapeHtml(value) {
-    return value
+    return String(value ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
@@ -2414,9 +2747,3 @@
     return Math.min(Math.max(value, min), max);
   }
 })();
-
-
-
-
-
-
