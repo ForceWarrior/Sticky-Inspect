@@ -1,6 +1,6 @@
 # Sticky Inspect Privacy Policy
 
-Effective date: April 26, 2026
+Effective date: October 13, 2026
 
 Sticky Inspect is a browser extension that lets you pick elements on web pages, save local page edits, and reapply those edits when the page reloads or changes.
 
@@ -12,12 +12,11 @@ Sticky Inspect does not collect, sell, rent, or transmit your personal informati
 
 Sticky Inspect may store the following data locally in your browser:
 
-- Saved rules for a site, such as CSS selectors, replacement text, form values, HTML snippets, CSS rules, attribute values, and remove/insert actions.
+- Saved rules for a site, such as CSS selectors, replacement text, form values, HTML snippets, CSS rules, attribute values, and remove/insert actions. When you pick an element, its current text or HTML is shown in the editor so you can change it. Whatever you save becomes part of the rule.
 - Theme preference.
-- Temporary panel state, such as whether the panel is open and where it was positioned on the page.
 - Site keys used to associate saved rules with a domain or local file URL.
 
-This data is stored using browser extension storage and session storage. It stays on your device unless your browser sync settings or backup tools copy extension data elsewhere.
+Rules, site keys, and the theme preference are stored in the extension's local storage (`chrome.storage.local`). Temporary panel state, such as whether the panel is open and where it was positioned, is kept in the tab's session storage and is cleared when the tab is closed. All of this stays on your device unless your browser sync settings or backup tools copy extension data elsewhere.
 
 ## Page Access
 
@@ -48,8 +47,8 @@ You can delete saved rules from the extension's rule manager or by clearing the 
 
 Sticky Inspect uses these browser permissions:
 
-- `storage`, to save rules, themes, and panel state locally.
-- `tabs`, `activeTab`, and `scripting`, to open the in-page panel and inject the extension scripts when needed.
+- `storage`, to save rules and the theme preference locally.
+- `scripting`, to add the in-page panel to tabs that were already open before Sticky Inspect was installed or updated.
 - `<all_urls>`, so saved edits can be applied on the pages and local files where you use Sticky Inspect.
 
 ## Changes To This Policy

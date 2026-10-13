@@ -1,21 +1,32 @@
 {
   "manifest_version": 3,
   "name": "Sticky Inspect",
-  "version": "1.0.0",
-  "description": "Inspect elements remaining even on refresh, Easily change your inspections, themes and more.",
-  "permissions": ["storage", "tabs", "activeTab", "scripting"],
-  "host_permissions": ["<all_urls>"],
+  "version": "1.1.0",
+  "description": "Save page edits that survive refresh: pick any element, change its text, HTML, attributes or CSS, and it stays changed.",
+  "permissions": [
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "action": {
     "default_title": "Sticky Inspect",
-    "default_icon": { "128": "Assets/Icon.png" }
+    "default_icon": {
+      "128": "Assets/Icon.png"
+    }
   },
   "icons": {
     "128": "Assets/Icon.png"
   },
   "web_accessible_resources": [
     {
-      "resources": ["Assets/Icon.png"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "Assets/Icon.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "background": {
@@ -23,8 +34,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["JS/actions.js", "JS/content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "JS/actions.js",
+        "JS/content.js"
+      ],
       "run_at": "document_start"
     }
   ]
